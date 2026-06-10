@@ -1,0 +1,296 @@
+{
+  "info": {
+    "name": "KPI Management API",
+    "_postman_id": "kpi-management-api-v1",
+    "description": "API collection for KPI Management System. Base URL: http://localhost:8080/kpi\n\nAfter login, the JWT token is automatically saved to the `token` collection variable and used in all subsequent requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/kpi",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const res = pm.response.json();",
+                  "    pm.collectionVariables.set('token', res.token);",
+                  "    console.log('Token saved:', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@kpi.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticate and receive a JWT token. Token is automatically saved to the `token` collection variable."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"admin@kpi.com\",\n  \"password\": \"admin123\"\n}"
+                }
+              },
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"email\": \"admin@kpi.com\",\n  \"role\": \"admin\",\n  \"name\": \"John Doe\",\n  \"employeeId\": 1\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/employees",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "employees"]
+            },
+            "description": "Returns a list of all employees."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"John Doe\",\n      \"email\": \"john@kpi.com\",\n      \"designation\": \"Engineer\",\n      \"department\": \"Tech\"\n    }\n  ],\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/employees/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "employees", "1"]
+            },
+            "description": "Returns a single employee by their numeric ID."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"John Doe\",\n    \"email\": \"john@kpi.com\",\n    \"designation\": \"Engineer\",\n    \"department\": \"Tech\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Employee not found with id: 99\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KRA Areas",
+      "item": [
+        {
+          "name": "Get All KRA Areas",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas"],
+              "query": [
+                {
+                  "key": "activeOnly",
+                  "value": "false",
+                  "description": "Set to true to return only active (is_active=1) records",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns all non-deleted KRA Areas, ordered by sort_order. Add `?activeOnly=true` to filter only active records."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"sortOrder\": 1,\n      \"areaName\": \"Financial Performance\",\n      \"financialYear\": \"2025-26\",\n      \"isActive\": true,\n      \"createdAt\": \"2026-06-10T11:00:00\",\n      \"updatedAt\": \"2026-06-10T11:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All KRA Areas (Active Only)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas?activeOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas"],
+              "query": [
+                {
+                  "key": "activeOnly",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Returns only active (is_active=1), non-deleted KRA Areas ordered by sort_order."
+          },
+          "response": []
+        },
+        {
+          "name": "Get KRA Area by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas", "1"]
+            },
+            "description": "Returns a single KRA Area by ID. Returns 404 if not found or soft-deleted."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:00:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"message\": \"KRA Area not found with id: 99\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create KRA Area",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"areaName\": \"Financial Performance\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas"]
+            },
+            "description": "Creates a new KRA Area. `areaName` is required. Returns 201 Created."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:00:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"areaName\": \"Area name is required\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update KRA Area",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"areaName\": \"Financial Performance (Updated)\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas", "1"]
+            },
+            "description": "Updates an existing KRA Area by ID. Returns 404 if not found or soft-deleted."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area updated successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance (Updated)\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:15:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:15:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete KRA Area",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kra-areas/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kra-areas", "1"]
+            },
+            "description": "Soft-deletes a KRA Area (sets is_deleted=true). The record is not removed from the database. Returns 404 if already deleted or not found."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area deleted successfully\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
