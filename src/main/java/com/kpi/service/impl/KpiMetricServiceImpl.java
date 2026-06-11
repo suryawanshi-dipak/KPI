@@ -9,6 +9,7 @@ import com.kpi.dto.request.KpiMetricRequest;
 import com.kpi.dto.response.KpiMetricResponse;
 import com.kpi.entity.KpiMetric;
 import com.kpi.entity.KraArea;
+import com.kpi.exception.ResourceNotFoundException;
 import com.kpi.repository.KpiMetricRepository;
 import com.kpi.repository.KraAreaRepository;
 import com.kpi.service.KpiMetricService;
@@ -26,8 +27,8 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     public List<KpiMetricResponse> getAll(boolean activeOnly) {
 
         List<KpiMetric> metrics = activeOnly
-                ? kpiMetricRepository.findByIsDeletedFalseAndIsActiveTrue()
-                : kpiMetricRepository.findByIsDeletedFalse();
+                ? kpiMetricRepository.findAllByIsDeletedFalseAndIsActiveTrue()
+                : kpiMetricRepository.findAllByIsDeletedFalse();
 
         return metrics.stream()
                 .map(this::mapToResponse)
@@ -37,8 +38,8 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     @Override
     public KpiMetricResponse getById(Integer id) {
 
-        KpiMetric metric = kpiMetricRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("KPI Metric not found"));
+        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric not found"));
 
         return mapToResponse(metric);
     }
@@ -47,7 +48,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     public KpiMetricResponse create(KpiMetricRequest request) {
 
         KraArea kraArea = kraAreaRepository.findById(request.getKraAreaId())
-                .orElseThrow(() -> new RuntimeException("KRA Area not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("KRA Area not found"));
 
         KpiMetric metric = KpiMetric.builder()
                 .kraArea(kraArea)
@@ -73,11 +74,40 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     @Override
     public KpiMetricResponse update(Integer id, KpiMetricRequest request) {
 
-        return null;
+        KpiMetric metric = kpiMetricRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("KPI Metric not found"));
+
+        KraArea kraArea = kraAreaRepository.findById(request.getKraAreaId())
+                .orElseThrow(() -> new ResourceNotFoundException("KRA AREA not found"));
+
+        metric.setKraArea(kraArea);
+        metric.setName(request.getName());
+        metric.setTargetExpression(request.getTargetExpression());
+        metric.setDirection(request.getDirection());
+        metric.setTargetValue(request.getTargetValue());
+        metric.setWarnThreshold(request.getWarnThreshold());
+        metric.setCriticalThreshold(request.getCriticalThreshold());
+        metric.setUnit(request.getUnit());
+        metric.setFrequency(request.getFrequency());
+        metric.setSourceSystem(request.getSourceSystem());
+        metric.setSourceReference(request.getSourceReference());
+        metric.setMeasurementInstruction(request.getMeasurementInstruction());
+        metric.setIsActive(request.getIsActive());
+
+        metric = kpiMetricRepository.save(metric);
+
+        return mapToResponse(metric);
     }
 
     @Override
     public void delete(Integer id) {
+
+        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric not found"));
+
+        metric.setIsDeleted(true);
+
+        kpiMetricRepository.save(metric);
 
     }
 

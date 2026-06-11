@@ -8,7 +8,9 @@ import java.util.Optional;
 
 public interface KpiMetricRepository extends JpaRepository<KpiMetric, Integer> {
 
-    List<KpiMetric> findByIsDeletedFalse();
+    List<KpiMetric> findAllByIsDeletedFalse();
 
-    List<KpiMetric> findByIsDeletedFalseAndIsActiveTrue();
+    List<KpiMetric> findAllByIsDeletedFalseAndIsActiveTrue();
+
+    Optional<KpiMetric> findByIdAndIsDeletedFalse(Integer id);
 }
