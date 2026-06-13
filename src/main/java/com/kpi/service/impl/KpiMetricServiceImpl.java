@@ -1,9 +1,9 @@
 package com.kpi.service.impl;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.kpi.dto.request.KpiMetricRequest;
 import com.kpi.dto.response.KpiMetricResponse;
@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class KpiMetricServiceImpl implements KpiMetricService {
 
     private final KpiMetricRepository kpiMetricRepository;
@@ -25,14 +26,10 @@ public class KpiMetricServiceImpl implements KpiMetricService {
 
     @Override
     public List<KpiMetricResponse> getAll(boolean activeOnly) {
-
         List<KpiMetric> metrics = activeOnly
-                ? kpiMetricRepository.findAllByIsDeletedFalseAndIsActiveTrue()
-                : kpiMetricRepository.findAllByIsDeletedFalse();
-
-        return metrics.stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                ? kpiMetricRepository.findAllActiveWithKraArea()
+                : kpiMetricRepository.findAllWithKraArea();
+        return metrics.stream().map(this::mapToResponse).toList();
     }
 
     @Override
@@ -45,6 +42,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     }
 
     @Override
+    @Transactional
     public KpiMetricResponse create(KpiMetricRequest request) {
 
         KraArea kraArea = kraAreaRepository.findById(request.getKraAreaId())
@@ -72,10 +70,11 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     }
 
     @Override
+    @Transactional
     public KpiMetricResponse update(Integer id, KpiMetricRequest request) {
 
-        KpiMetric metric = kpiMetricRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("KPI Metric not found"));
+        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", id));
 
         KraArea kraArea = kraAreaRepository.findById(request.getKraAreaId())
                 .orElseThrow(() -> new ResourceNotFoundException("KRA AREA not found"));
@@ -100,6 +99,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
     }
 
     @Override
+    @Transactional
     public void delete(Integer id) {
 
         KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(id)

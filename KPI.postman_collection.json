@@ -1,8 +1,8 @@
 {
   "info": {
     "name": "KPI Management API",
-    "_postman_id": "kpi-management-api-v1",
-    "description": "API collection for KPI Management System. Base URL: http://localhost:8080/kpi\n\nAfter login, the JWT token is automatically saved to the `token` collection variable and used in all subsequent requests.",
+    "_postman_id": "kpi-management-api-v2",
+    "description": "API collection for KPI Management System.\n\nBase URL: http://localhost:8080/kpi\n\nAll endpoints (except Login) require a Bearer JWT token. After Login the token is automatically saved to the `token` collection variable and attached to every request.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -51,9 +51,7 @@
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"admin@kpi.com\",\n  \"password\": \"admin123\"\n}"
@@ -63,21 +61,20 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "login"]
             },
-            "description": "Authenticate and receive a JWT token. Token is automatically saved to the `token` collection variable."
+            "description": "Authenticate and receive a JWT token. Token is automatically saved to the `token` collection variable and used in all subsequent requests. Token expiry: 24 hours."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "originalRequest": {
-                "method": "POST",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"email\": \"admin@kpi.com\",\n  \"password\": \"admin123\"\n}"
-                }
-              },
-              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"email\": \"admin@kpi.com\",\n  \"role\": \"admin\",\n  \"name\": \"John Doe\",\n  \"employeeId\": 1\n}"
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"email\": \"admin@kpi.com\",\n  \"role\": \"admin\",\n  \"name\": \"Admin User\",\n  \"employeeId\": 1\n}"
+            },
+            {
+              "name": "401 Invalid Credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Invalid email or password\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         }
@@ -102,7 +99,7 @@
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"John Doe\",\n      \"email\": \"john@kpi.com\",\n      \"designation\": \"Engineer\",\n      \"department\": \"Tech\"\n    }\n  ],\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"John Doe\",\n      \"email\": \"john@kpi.com\",\n      \"designation\": \"Senior Engineer\",\n      \"department\": \"Tech\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         },
@@ -122,13 +119,13 @@
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"John Doe\",\n    \"email\": \"john@kpi.com\",\n    \"designation\": \"Engineer\",\n    \"department\": \"Tech\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"John Doe\",\n    \"email\": \"john@kpi.com\",\n    \"designation\": \"Senior Engineer\",\n    \"department\": \"Tech\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             },
             {
               "name": "404 Not Found",
               "status": "Not Found",
               "code": 404,
-              "body": "{\n  \"success\": false,\n  \"message\": \"Employee not found with id: 99\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": false,\n  \"message\": \"Employee not found with id: 99\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         }
@@ -149,19 +146,19 @@
                 {
                   "key": "activeOnly",
                   "value": "false",
-                  "description": "Set to true to return only active (is_active=1) records",
+                  "description": "Set to true to return only active records",
                   "disabled": true
                 }
               ]
             },
-            "description": "Returns all non-deleted KRA Areas, ordered by sort_order. Add `?activeOnly=true` to filter only active records."
+            "description": "Returns all non-deleted KRA Areas ordered by sort_order. Add `?activeOnly=true` to filter only active records."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"sortOrder\": 1,\n      \"areaName\": \"Financial Performance\",\n      \"financialYear\": \"2025-26\",\n      \"isActive\": true,\n      \"createdAt\": \"2026-06-10T11:00:00\",\n      \"updatedAt\": \"2026-06-10T11:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"sortOrder\": 1,\n      \"areaName\": \"Quality Engineering & Reliability\",\n      \"financialYear\": \"2025-26\",\n      \"isActive\": true,\n      \"createdAt\": \"2026-06-13T10:00:00\",\n      \"updatedAt\": \"2026-06-13T10:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         },
@@ -173,14 +170,9 @@
               "raw": "{{baseUrl}}/api/v1/kra-areas?activeOnly=true",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "kra-areas"],
-              "query": [
-                {
-                  "key": "activeOnly",
-                  "value": "true"
-                }
-              ]
+              "query": [{ "key": "activeOnly", "value": "true" }]
             },
-            "description": "Returns only active (is_active=1), non-deleted KRA Areas ordered by sort_order."
+            "description": "Returns only active, non-deleted KRA Areas ordered by sort_order."
           },
           "response": []
         },
@@ -200,13 +192,13 @@
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:00:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Quality Engineering & Reliability\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-13T10:00:00\",\n    \"updatedAt\": \"2026-06-13T10:00:00\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             },
             {
               "name": "404 Not Found",
               "status": "Not Found",
               "code": 404,
-              "body": "{\n  \"success\": false,\n  \"message\": \"KRA Area not found with id: 99\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": false,\n  \"message\": \"KRA Area not found with id: 99\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         },
@@ -214,32 +206,30 @@
           "name": "Create KRA Area",
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"areaName\": \"Financial Performance\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
+              "raw": "{\n  \"areaName\": \"Quality Engineering & Reliability\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/kra-areas",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "kra-areas"]
             },
-            "description": "Creates a new KRA Area. `areaName` is required. Returns 201 Created."
+            "description": "Creates a new KRA Area. `areaName` is required (max 200 chars). Returns 201 Created."
           },
           "response": [
             {
               "name": "201 Created",
               "status": "Created",
               "code": 201,
-              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:00:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Quality Engineering & Reliability\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-13T10:00:00\",\n    \"updatedAt\": \"2026-06-13T10:00:00\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             },
             {
               "name": "400 Validation Error",
               "status": "Bad Request",
               "code": 400,
-              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"areaName\": \"Area name is required\"\n  },\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"areaName\": \"Area name is required\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         },
@@ -247,12 +237,10 @@
           "name": "Update KRA Area",
           "request": {
             "method": "PUT",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"areaName\": \"Financial Performance (Updated)\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
+              "raw": "{\n  \"areaName\": \"Quality Engineering & Reliability\",\n  \"sortOrder\": 1,\n  \"financialYear\": \"2025-26\",\n  \"isActive\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/kra-areas/1",
@@ -266,7 +254,7 @@
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area updated successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Financial Performance (Updated)\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-10T11:00:00\",\n    \"updatedAt\": \"2026-06-10T11:15:00\"\n  },\n  \"timestamp\": \"2026-06-10T11:15:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area updated successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"sortOrder\": 1,\n    \"areaName\": \"Quality Engineering & Reliability\",\n    \"financialYear\": \"2025-26\",\n    \"isActive\": true,\n    \"createdAt\": \"2026-06-13T10:00:00\",\n    \"updatedAt\": \"2026-06-13T10:15:00\"\n  },\n  \"timestamp\": \"2026-06-13T10:15:00\"\n}"
             }
           ]
         },
@@ -279,14 +267,679 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "kra-areas", "1"]
             },
-            "description": "Soft-deletes a KRA Area (sets is_deleted=true). The record is not removed from the database. Returns 404 if already deleted or not found."
+            "description": "Soft-deletes a KRA Area (sets is_deleted=true). Record is not removed from the database."
           },
           "response": [
             {
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area deleted successfully\",\n  \"timestamp\": \"2026-06-10T11:00:00\"\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"KRA Area deleted successfully\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KPI Metrics",
+      "item": [
+        {
+          "name": "Get All KPI Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics"],
+              "query": [
+                {
+                  "key": "activeOnly",
+                  "value": "false",
+                  "description": "Set to true to return only active metrics",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns all non-deleted KPI Metrics with their KRA Area. Uses JOIN FETCH — no N+1. Add `?activeOnly=true` to filter active-only."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"kraAreaId\": 1,\n      \"name\": \"Production Defect Rate\",\n      \"targetExpression\": \"< 3 per quarter\",\n      \"direction\": \"lower_better\",\n      \"targetValue\": 3.00,\n      \"warnThreshold\": 5.00,\n      \"criticalThreshold\": 10.00,\n      \"unit\": \"defects\",\n      \"frequency\": \"quarterly\",\n      \"sourceSystem\": \"Jira\",\n      \"sourceReference\": \"Jira: project=PROD AND type=Bug AND priority=High\",\n      \"measurementInstruction\": \"Run the saved Jira filter and count open bugs.\",\n      \"isActive\": true,\n      \"version\": 1,\n      \"createdAt\": \"2026-06-13T10:00:00\",\n      \"updatedAt\": \"2026-06-13T10:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All KPI Metrics (Active Only)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics?activeOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics"],
+              "query": [{ "key": "activeOnly", "value": "true" }]
+            },
+            "description": "Returns only active, non-deleted KPI Metrics."
+          },
+          "response": []
+        },
+        {
+          "name": "Get KPI Metric by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics", "1"]
+            },
+            "description": "Returns a single KPI Metric by ID. Returns 404 if not found or soft-deleted."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 1,\n    \"kraAreaId\": 1,\n    \"name\": \"Production Defect Rate\",\n    \"direction\": \"lower_better\",\n    \"targetValue\": 3.00,\n    \"warnThreshold\": 5.00,\n    \"criticalThreshold\": 10.00,\n    \"unit\": \"defects\",\n    \"frequency\": \"quarterly\",\n    \"isActive\": true,\n    \"version\": 1\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"message\": \"KPI Metric not found with id: 99\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create KPI Metric",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kraAreaId\": 1,\n  \"name\": \"Production Defect Rate\",\n  \"targetExpression\": \"< 3 per quarter\",\n  \"direction\": \"lower_better\",\n  \"targetValue\": 3.00,\n  \"warnThreshold\": 5.00,\n  \"criticalThreshold\": 10.00,\n  \"unit\": \"defects\",\n  \"frequency\": \"quarterly\",\n  \"sourceSystem\": \"Jira\",\n  \"sourceReference\": \"Jira: project=PROD AND type=Bug AND priority=High\",\n  \"measurementInstruction\": \"Run the saved Jira filter and count open bugs.\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics"]
+            },
+            "description": "Creates a new KPI Metric. Required fields: `kraAreaId`, `name`, `direction`, `frequency`.\n\nValid `direction` values: `higher_better`, `lower_better`, `target`\nValid `frequency` values: `weekly`, `bi_weekly`, `monthly`, `quarterly`, `per_release`, `per_commit`"
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KPI Metric created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"kraAreaId\": 1,\n    \"name\": \"Production Defect Rate\",\n    \"direction\": \"lower_better\",\n    \"targetValue\": 3.00,\n    \"warnThreshold\": 5.00,\n    \"criticalThreshold\": 10.00,\n    \"unit\": \"defects\",\n    \"frequency\": \"quarterly\",\n    \"isActive\": true,\n    \"version\": 1,\n    \"createdAt\": \"2026-06-13T10:00:00\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"name\": \"Name is required\",\n    \"direction\": \"Direction is required\",\n    \"frequency\": \"Frequency is required\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update KPI Metric",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kraAreaId\": 1,\n  \"name\": \"Production Defect Rate\",\n  \"targetExpression\": \"< 3 per quarter\",\n  \"direction\": \"lower_better\",\n  \"targetValue\": 3.00,\n  \"warnThreshold\": 5.00,\n  \"criticalThreshold\": 10.00,\n  \"unit\": \"defects\",\n  \"frequency\": \"quarterly\",\n  \"sourceSystem\": \"Jira\",\n  \"sourceReference\": \"Jira: project=PROD AND type=Bug AND priority=High\",\n  \"measurementInstruction\": \"Run the saved Jira filter and count open bugs.\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics", "1"]
+            },
+            "description": "Updates an existing KPI Metric by ID. Returns 404 if not found or soft-deleted."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KPI Metric updated successfully\",\n  \"data\": { \"id\": 1, \"name\": \"Production Defect Rate\", \"version\": 1 },\n  \"timestamp\": \"2026-06-13T10:15:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete KPI Metric",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-metrics/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-metrics", "1"]
+            },
+            "description": "Soft-deletes a KPI Metric (sets is_deleted=true)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"KPI Metric deleted successfully\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KPI Assignments",
+      "item": [
+        {
+          "name": "Get All Assignments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments"]
+            },
+            "description": "Returns all non-deleted assignments. Response includes kpiMetricName, kraAreaName, and employeeName — loaded via a single JOIN query."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"kpiMetricId\": 1,\n      \"kpiMetricName\": \"Production Defect Rate\",\n      \"kraAreaId\": 1,\n      \"kraAreaName\": \"Quality Engineering & Reliability\",\n      \"employeeId\": 2,\n      \"employeeName\": \"John Doe\",\n      \"team\": \"Backend\",\n      \"isPrimary\": true,\n      \"assignedFrom\": \"2026-04-01\",\n      \"assignedTo\": \"2027-03-31\",\n      \"createdAt\": \"2026-06-13T10:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Assignment by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments", "1"]
+            },
+            "description": "Returns a single assignment with full joined details."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Assignments by Metric",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments/metric/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments", "metric", "1"]
+            },
+            "description": "Returns all non-deleted assignments for a specific KPI Metric (all employees responsible for that KPI)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Assignments by Employee",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments/employee/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments", "employee", "1"]
+            },
+            "description": "Returns all KPIs assigned to a specific employee."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Assignment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kpiMetricId\": 1,\n  \"employeeId\": 2,\n  \"team\": \"Backend\",\n  \"isPrimary\": true,\n  \"assignedFrom\": \"2026-04-01\",\n  \"assignedTo\": \"2027-03-31\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments"]
+            },
+            "description": "Assigns an employee to a KPI Metric. Required fields: `kpiMetricId`, `employeeId`."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Assignment created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"kpiMetricId\": 1,\n    \"kpiMetricName\": \"Production Defect Rate\",\n    \"kraAreaId\": 1,\n    \"kraAreaName\": \"Quality Engineering & Reliability\",\n    \"employeeId\": 2,\n    \"employeeName\": \"John Doe\",\n    \"team\": \"Backend\",\n    \"isPrimary\": true,\n    \"assignedFrom\": \"2026-04-01\",\n    \"assignedTo\": \"2027-03-31\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"kpiMetricId\": \"KPI Metric is required\",\n    \"employeeId\": \"Employee is required\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Assignment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kpiMetricId\": 1,\n  \"employeeId\": 2,\n  \"team\": \"Backend\",\n  \"isPrimary\": false,\n  \"assignedFrom\": \"2026-04-01\",\n  \"assignedTo\": \"2027-03-31\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments", "1"]
+            },
+            "description": "Updates an existing assignment. Returns 404 if not found or soft-deleted."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Assignment",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-assignments/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-assignments", "1"]
+            },
+            "description": "Soft-deletes an assignment (sets is_deleted=true)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Assignment deleted successfully\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KPI Measurements",
+      "item": [
+        {
+          "name": "Get All Measurements",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements"],
+              "query": [
+                {
+                  "key": "metricId",
+                  "value": "1",
+                  "description": "Filter by KPI Metric ID",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "red",
+                  "description": "Filter by status: green | amber | red | critical | unknown",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns all non-deleted measurements ordered by measuredAt DESC. Optional filters:\n- `?metricId=1` — measurements for a specific KPI\n- `?status=red` — measurements with a specific status\n\nResponse includes kpiMetricName, kraAreaName, and measuredByName via JOIN."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"kpiMetricId\": 1,\n      \"kpiMetricName\": \"Production Defect Rate\",\n      \"kraAreaId\": 1,\n      \"kraAreaName\": \"Quality Engineering & Reliability\",\n      \"kpiMetricVersion\": 1,\n      \"measuredValue\": 7.00,\n      \"measurementPeriodType\": \"quarterly\",\n      \"measurementPeriodLabel\": \"Q1-FY2026\",\n      \"periodStartDate\": \"2026-04-01\",\n      \"periodEndDate\": \"2026-06-30\",\n      \"status\": \"red\",\n      \"measurementNote\": \"High defect count due to rushed release.\",\n      \"postAction\": \"Added regression suite to CI pipeline.\",\n      \"measuredAt\": \"2026-06-13T10:00:00\",\n      \"measuredById\": 2,\n      \"measuredByName\": \"John Doe\",\n      \"isSystemGenerated\": false,\n      \"isPending\": false,\n      \"isCorrected\": false,\n      \"createdAt\": \"2026-06-13T10:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Measurements (by Metric)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements?metricId=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements"],
+              "query": [{ "key": "metricId", "value": "1" }]
+            },
+            "description": "Returns all measurements for KPI Metric with ID 1, ordered newest first."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Measurements (by Status)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements?status=red",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements"],
+              "query": [{ "key": "status", "value": "red" }]
+            },
+            "description": "Returns all measurements with status=red. Valid values: green, amber, red, critical, unknown."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Measurements",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements/pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements", "pending"]
+            },
+            "description": "Returns all measurements where is_pending=true. Used for the 'Data Pending' dashboard indicator."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 5,\n      \"kpiMetricName\": \"Sprint Velocity\",\n      \"isPending\": true,\n      \"pendingReason\": \"Jira data not available yet\",\n      \"measurementPeriodLabel\": \"Q1-FY2026\",\n      \"status\": \"unknown\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Measurement by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements", "1"]
+            },
+            "description": "Returns a single measurement with full joined details."
+          },
+          "response": []
+        },
+        {
+          "name": "Record Measurement",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kpiMetricId\": 1,\n  \"measuredValue\": 7.00,\n  \"measurementPeriodType\": \"quarterly\",\n  \"measurementPeriodLabel\": \"Q1-FY2026\",\n  \"periodStartDate\": \"2026-04-01\",\n  \"periodEndDate\": \"2026-06-30\",\n  \"status\": \"red\",\n  \"measurementNote\": \"High defect count due to rushed release.\",\n  \"rawPayload\": \"Jira export CSV...\",\n  \"postAction\": \"Added regression suite to CI pipeline.\",\n  \"measuredById\": 2,\n  \"isSystemGenerated\": false,\n  \"isPending\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements"]
+            },
+            "description": "Records a new KPI measurement. Required fields: `kpiMetricId`, `measurementPeriodType`, `measurementPeriodLabel`, `periodStartDate`, `periodEndDate`, `status`, `measuredById`.\n\nTo record a 'Data Pending' entry: set `isPending: true`, `status: \"unknown\"`, and `measuredValue: null`.\n\nTo record a correction: set `correctedFromId` to the ID of the original measurement — `isCorrected` will be set to true automatically.\n\nValid `status` values: `green`, `amber`, `red`, `critical`, `unknown`\nValid `measurementPeriodType` values: `weekly`, `bi_weekly`, `monthly`, `quarterly`, `per_release`, `per_commit`"
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Measurement recorded successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"kpiMetricId\": 1,\n    \"kpiMetricName\": \"Production Defect Rate\",\n    \"kraAreaName\": \"Quality Engineering & Reliability\",\n    \"measuredValue\": 7.00,\n    \"status\": \"red\",\n    \"measuredAt\": \"2026-06-13T10:00:00\",\n    \"measuredByName\": \"John Doe\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "Record Pending (Data Not Available)",
+              "status": "Created",
+              "code": 201,
+              "originalRequest": {
+                "method": "POST",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"kpiMetricId\": 1,\n  \"measuredValue\": null,\n  \"measurementPeriodType\": \"quarterly\",\n  \"measurementPeriodLabel\": \"Q1-FY2026\",\n  \"periodStartDate\": \"2026-04-01\",\n  \"periodEndDate\": \"2026-06-30\",\n  \"status\": \"unknown\",\n  \"isPending\": true,\n  \"pendingReason\": \"Jira data not available yet — check back Monday\",\n  \"measuredById\": 2\n}"
+                }
+              },
+              "body": "{\n  \"success\": true,\n  \"message\": \"Measurement recorded successfully\",\n  \"data\": { \"id\": 5, \"status\": \"unknown\", \"isPending\": true }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Measurement",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kpiMetricId\": 1,\n  \"measuredValue\": 6.00,\n  \"measurementPeriodType\": \"quarterly\",\n  \"measurementPeriodLabel\": \"Q1-FY2026\",\n  \"periodStartDate\": \"2026-04-01\",\n  \"periodEndDate\": \"2026-06-30\",\n  \"status\": \"red\",\n  \"measurementNote\": \"Corrected value after re-counting.\",\n  \"measuredById\": 2,\n  \"isPending\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements", "1"]
+            },
+            "description": "Updates an existing measurement. Returns 404 if not found or soft-deleted."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Measurement",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kpi-measurements/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "kpi-measurements", "1"]
+            },
+            "description": "Soft-deletes a measurement (sets is_deleted=true)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Measurement deleted successfully\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Performance Reviews",
+      "item": [
+        {
+          "name": "Get All Reviews",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews"],
+              "query": [
+                {
+                  "key": "employeeId",
+                  "value": "1",
+                  "description": "Filter by employee ID",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "submitted",
+                  "description": "Filter by status: draft | submitted | approved",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns all non-deleted performance reviews ordered by createdAt DESC. Response includes employeeName and reviewerName.\n\nOptional filters:\n- `?employeeId=1` — all reviews for a specific employee\n- `?status=submitted` — all reviews in a specific status"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"employeeId\": 2,\n      \"employeeName\": \"John Doe\",\n      \"reviewerId\": 1,\n      \"reviewerName\": \"Admin User\",\n      \"reviewType\": \"quarterly\",\n      \"periodLabel\": \"Q1-FY2026\",\n      \"periodStart\": \"2026-04-01\",\n      \"periodEnd\": \"2026-06-30\",\n      \"status\": \"draft\",\n      \"kraComments\": \"[{\\\"kraAreaId\\\": 1, \\\"comments\\\": \\\"Good quality work.\\\", \\\"score\\\": 4.0}]\",\n      \"overallScore\": 3.80,\n      \"createdAt\": \"2026-06-13T10:00:00\"\n    }\n  ],\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Reviews (by Employee)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews?employeeId=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews"],
+              "query": [{ "key": "employeeId", "value": "2" }]
+            },
+            "description": "Returns all reviews for employee ID 2."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Reviews (by Status)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews?status=submitted",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews"],
+              "query": [{ "key": "status", "value": "submitted" }]
+            },
+            "description": "Returns all reviews awaiting manager approval."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews", "1"]
+            },
+            "description": "Returns a single performance review with employee and reviewer names."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": 2,\n  \"reviewerId\": 1,\n  \"reviewType\": \"quarterly\",\n  \"periodLabel\": \"Q1-FY2026\",\n  \"periodStart\": \"2026-04-01\",\n  \"periodEnd\": \"2026-06-30\",\n  \"kraComments\": \"[{\\\"kraAreaId\\\": 1, \\\"comments\\\": \\\"Solid performance.\\\", \\\"score\\\": 4.0}]\",\n  \"overallScore\": 3.80\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews"]
+            },
+            "description": "Creates a new performance review. Defaults to `status: draft`. `employeeId` is required.\n\nValid `reviewType` values: `quarterly`, `annual`\nValid `status` values: `draft`, `submitted`, `approved`\n\n`kraComments` is a JSON string — suggested structure:\n```json\n[\n  { \"kraAreaId\": 1, \"comments\": \"...\", \"score\": 4.0 }\n]\n```"
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Performance review created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"employeeId\": 2,\n    \"employeeName\": \"John Doe\",\n    \"reviewerId\": 1,\n    \"reviewerName\": \"Admin User\",\n    \"reviewType\": \"quarterly\",\n    \"periodLabel\": \"Q1-FY2026\",\n    \"status\": \"draft\",\n    \"overallScore\": 3.80\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"data\": {\n    \"employeeId\": \"Employee is required\"\n  },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Review",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": 2,\n  \"reviewerId\": 1,\n  \"reviewType\": \"quarterly\",\n  \"periodLabel\": \"Q1-FY2026\",\n  \"periodStart\": \"2026-04-01\",\n  \"periodEnd\": \"2026-06-30\",\n  \"kraComments\": \"[{\\\"kraAreaId\\\": 1, \\\"comments\\\": \\\"Updated comment.\\\", \\\"score\\\": 4.5}]\",\n  \"overallScore\": 4.10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews", "1"]
+            },
+            "description": "Updates a review. Returns 400 if the review is already `approved` (approved reviews are immutable)."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Review",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews/1/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews", "1", "submit"]
+            },
+            "description": "Transitions a review from `draft` → `submitted`. Returns 400 if the review is not in `draft` status."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Performance review submitted\",\n  \"data\": { \"id\": 1, \"status\": \"submitted\" },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Bad Request (already submitted)",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Only draft reviews can be submitted\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Approve Review",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews/1/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews", "1", "approve"]
+            },
+            "description": "Transitions a review from `submitted` → `approved`. Returns 400 if the review is not in `submitted` status. Approved reviews become immutable (no further edits or deletes)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Performance review approved\",\n  \"data\": { \"id\": 1, \"status\": \"approved\" },\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Bad Request (not submitted)",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Only submitted reviews can be approved\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Review",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/performance-reviews/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "performance-reviews", "1"]
+            },
+            "description": "Soft-deletes a review. Returns 400 if the review is already `approved`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Performance review deleted successfully\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
+            },
+            {
+              "name": "400 Bad Request (approved)",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Approved reviews cannot be deleted\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
         }
