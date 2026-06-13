@@ -10,6 +10,7 @@ import com.kpi.repository.EmployeeRepository;
 import com.kpi.repository.KpiEmployeeAssignmentRepository;
 import com.kpi.repository.KpiMetricRepository;
 import com.kpi.service.KpiAssignmentService;
+import com.kpi.util.EmployeeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -102,7 +103,6 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
     }
 
     private KpiAssignmentResponse toResponse(KpiEmployeeAssignment a) {
-        String empName = resolveEmployeeName(a.getEmployee());
         return KpiAssignmentResponse.builder()
                 .id(a.getId())
                 .kpiMetricId(a.getKpiMetric().getId())
@@ -110,7 +110,7 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
                 .kraAreaId(a.getKpiMetric().getKraArea().getId())
                 .kraAreaName(a.getKpiMetric().getKraArea().getAreaName())
                 .employeeId(a.getEmployee().getId())
-                .employeeName(empName)
+                .employeeName(EmployeeUtils.resolveName(a.getEmployee()))
                 .team(a.getTeam())
                 .isPrimary(a.getIsPrimary())
                 .assignedFrom(a.getAssignedFrom())
@@ -122,12 +122,4 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
                 .build();
     }
 
-    private String resolveEmployeeName(Employee e) {
-        if (e.getFirstName() != null) {
-            String full = e.getFirstName();
-            if (e.getLastName() != null) full += " " + e.getLastName();
-            return full;
-        }
-        return e.getName() != null ? e.getName() : e.getEmail();
-    }
 }

@@ -11,6 +11,7 @@ import com.kpi.repository.EmployeeRepository;
 import com.kpi.repository.KpiMeasurementRepository;
 import com.kpi.repository.KpiMetricRepository;
 import com.kpi.service.KpiMeasurementService;
+import com.kpi.util.EmployeeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -117,6 +118,16 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
         if (request.getIsPending() != null) measurement.setIsPending(request.getIsPending());
         measurement.setPendingReason(request.getPendingReason());
 
+        if (request.getCorrectedFromId() != null) {
+            KpiMeasurement original = measurementRepository.findById(request.getCorrectedFromId())
+                    .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", request.getCorrectedFromId()));
+            measurement.setCorrectedFrom(original);
+            measurement.setIsCorrected(true);
+        } else {
+            measurement.setCorrectedFrom(null);
+            measurement.setIsCorrected(false);
+        }
+
         return toResponse(measurementRepository.save(measurement));
     }
 
@@ -134,7 +145,6 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
     }
 
     private KpiMeasurementResponse toResponse(KpiMeasurement m) {
-        String measuredByName = resolveEmployeeName(m.getMeasuredBy());
         return KpiMeasurementResponse.builder()
                 .id(m.getId())
                 .kpiMetricId(m.getKpiMetric().getId())
@@ -153,7 +163,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .postAction(m.getPostAction())
                 .measuredAt(m.getMeasuredAt())
                 .measuredById(m.getMeasuredBy().getId())
-                .measuredByName(measuredByName)
+                .measuredByName(EmployeeUtils.resolveName(m.getMeasuredBy()))
                 .isSystemGenerated(m.getIsSystemGenerated())
                 .isPending(m.getIsPending())
                 .pendingReason(m.getPendingReason())
@@ -166,12 +176,4 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .build();
     }
 
-    private String resolveEmployeeName(Employee e) {
-        if (e.getFirstName() != null) {
-            String full = e.getFirstName();
-            if (e.getLastName() != null) full += " " + e.getLastName();
-            return full;
-        }
-        return e.getName() != null ? e.getName() : e.getEmail();
-    }
 }

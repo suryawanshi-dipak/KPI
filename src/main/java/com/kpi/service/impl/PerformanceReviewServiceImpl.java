@@ -10,6 +10,7 @@ import com.kpi.exception.ResourceNotFoundException;
 import com.kpi.repository.EmployeeRepository;
 import com.kpi.repository.PerformanceReviewRepository;
 import com.kpi.service.PerformanceReviewService;
+import com.kpi.util.EmployeeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,7 +99,7 @@ public class PerformanceReviewServiceImpl implements PerformanceReviewService {
         review.setPeriodLabel(request.getPeriodLabel());
         review.setPeriodStart(request.getPeriodStart());
         review.setPeriodEnd(request.getPeriodEnd());
-        if (request.getStatus() != null) review.setStatus(request.getStatus());
+        // Status is intentionally not updated here — use /submit and /approve endpoints
         review.setKraComments(request.getKraComments());
         review.setOverallScore(request.getOverallScore());
 
@@ -144,15 +145,12 @@ public class PerformanceReviewServiceImpl implements PerformanceReviewService {
     }
 
     private PerformanceReviewResponse toResponse(PerformanceReview pr) {
-        String empName = pr.getEmployee() != null ? resolveEmployeeName(pr.getEmployee()) : null;
-        String reviewerName = pr.getReviewer() != null ? resolveEmployeeName(pr.getReviewer()) : null;
-
         return PerformanceReviewResponse.builder()
                 .id(pr.getId())
                 .employeeId(pr.getEmployee() != null ? pr.getEmployee().getId() : null)
-                .employeeName(empName)
+                .employeeName(EmployeeUtils.resolveName(pr.getEmployee()))
                 .reviewerId(pr.getReviewer() != null ? pr.getReviewer().getId() : null)
-                .reviewerName(reviewerName)
+                .reviewerName(EmployeeUtils.resolveName(pr.getReviewer()))
                 .reviewType(pr.getReviewType())
                 .periodLabel(pr.getPeriodLabel())
                 .periodStart(pr.getPeriodStart())
@@ -167,12 +165,4 @@ public class PerformanceReviewServiceImpl implements PerformanceReviewService {
                 .build();
     }
 
-    private String resolveEmployeeName(Employee e) {
-        if (e.getFirstName() != null) {
-            String full = e.getFirstName();
-            if (e.getLastName() != null) full += " " + e.getLastName();
-            return full;
-        }
-        return e.getName() != null ? e.getName() : e.getEmail();
-    }
 }

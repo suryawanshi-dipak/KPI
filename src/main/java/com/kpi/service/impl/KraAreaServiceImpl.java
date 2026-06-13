@@ -8,11 +8,13 @@ import com.kpi.repository.KraAreaRepository;
 import com.kpi.service.KraAreaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class KraAreaServiceImpl implements KraAreaService {
 
     private final KraAreaRepository kraAreaRepository;
@@ -31,6 +33,7 @@ public class KraAreaServiceImpl implements KraAreaService {
     }
 
     @Override
+    @Transactional
     public KraAreaResponse create(KraAreaRequest request) {
         KraArea area = KraArea.builder()
                 .areaName(request.getAreaName())
@@ -42,6 +45,7 @@ public class KraAreaServiceImpl implements KraAreaService {
     }
 
     @Override
+    @Transactional
     public KraAreaResponse update(Integer id, KraAreaRequest request) {
         KraArea area = findOrThrow(id);
         area.setAreaName(request.getAreaName());
@@ -54,6 +58,7 @@ public class KraAreaServiceImpl implements KraAreaService {
     }
 
     @Override
+    @Transactional
     public void delete(Integer id) {
         KraArea area = findOrThrow(id);
         area.setIsDeleted(true);
