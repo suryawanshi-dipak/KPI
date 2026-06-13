@@ -61,6 +61,7 @@ public class KraAreaServiceImpl implements KraAreaService {
     @Transactional
     public void delete(Integer id) {
         KraArea area = findOrThrow(id);
+        // Soft delete — KPI metrics referencing this area remain intact in the database
         area.setIsDeleted(true);
         kraAreaRepository.save(area);
     }

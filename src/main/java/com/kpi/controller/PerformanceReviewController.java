@@ -20,6 +20,7 @@ public class PerformanceReviewController {
 
     private final PerformanceReviewService reviewService;
 
+    // Single list endpoint: ?employeeId= and ?status= are optional filters; no params returns all records
     @GetMapping
     public ResponseEntity<ApiResponse<List<PerformanceReviewResponse>>> getAll(
             @RequestParam(required = false) Integer employeeId,

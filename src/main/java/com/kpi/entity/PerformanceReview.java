@@ -27,6 +27,7 @@ public class PerformanceReview {
     @JoinColumn(name = "employee_id")
     private Employee employee;
 
+    // reviewer_id is nullable — reviewer may be assigned after the review is created in draft
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewer_id")
     private Employee reviewer;
@@ -74,6 +75,7 @@ public class PerformanceReview {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        // Default status here rather than @Builder.Default because the create request can explicitly pass a status
         if (status == null) status = ReviewStatus.draft;
         if (isDeleted == null) isDeleted = false;
     }

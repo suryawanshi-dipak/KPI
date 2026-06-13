@@ -27,6 +27,7 @@ public class KpiMeasurement {
     @JoinColumn(name = "kpi_metric_id", nullable = false)
     private KpiMetric kpiMetric;
 
+    // Snapshot of the metric's version at measurement time — preserves historical accuracy if the metric is later revised
     @Column(name = "kpi_metric_version")
     private Integer kpiMetricVersion;
 
@@ -59,6 +60,7 @@ public class KpiMeasurement {
     @Column(name = "post_action", columnDefinition = "TEXT")
     private String postAction;
 
+    // updatable=false — original recording timestamp must not change even when a corrected record is saved
     @Column(name = "measured_at", nullable = false, updatable = false)
     private LocalDateTime measuredAt;
 
@@ -66,6 +68,7 @@ public class KpiMeasurement {
     @JoinColumn(name = "measured_by", nullable = false)
     private Employee measuredBy;
 
+    // @Builder.Default is required — Lombok's @Builder ignores field initializers without it
     @Column(name = "is_system_generated")
     @Builder.Default
     private Boolean isSystemGenerated = false;
@@ -81,6 +84,7 @@ public class KpiMeasurement {
     @Builder.Default
     private Boolean isCorrected = false;
 
+    // Self-referencing FK — when isCorrected=true this record supersedes the one in correctedFrom
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "corrected_from_id")
     private KpiMeasurement correctedFrom;

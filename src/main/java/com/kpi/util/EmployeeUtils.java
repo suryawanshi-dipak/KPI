@@ -6,6 +6,7 @@ public final class EmployeeUtils {
 
     private EmployeeUtils() {}
 
+    // Fallback chain: firstName+lastName → name → email (Employee table supports both naming conventions)
     public static String resolveName(Employee e) {
         if (e == null) return null;
         if (e.getFirstName() != null) {

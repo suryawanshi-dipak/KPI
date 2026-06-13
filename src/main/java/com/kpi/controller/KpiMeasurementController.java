@@ -20,6 +20,7 @@ public class KpiMeasurementController {
 
     private final KpiMeasurementService measurementService;
 
+    // Single list endpoint: ?metricId= and ?status= are optional filters; no params returns all records
     @GetMapping
     public ResponseEntity<ApiResponse<List<KpiMeasurementResponse>>> getAll(
             @RequestParam(required = false) Integer metricId,

@@ -83,6 +83,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .isPending(request.getIsPending() != null ? request.getIsPending() : false)
                 .pendingReason(request.getPendingReason());
 
+        // Link correction chain: new record points to the original it supersedes
         if (request.getCorrectedFromId() != null) {
             KpiMeasurement original = measurementRepository.findById(request.getCorrectedFromId())
                     .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", request.getCorrectedFromId()));
@@ -118,6 +119,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
         if (request.getIsPending() != null) measurement.setIsPending(request.getIsPending());
         measurement.setPendingReason(request.getPendingReason());
 
+        // Explicitly clear correction chain when correctedFromId is removed from the request
         if (request.getCorrectedFromId() != null) {
             KpiMeasurement original = measurementRepository.findById(request.getCorrectedFromId())
                     .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", request.getCorrectedFromId()));
@@ -135,6 +137,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
     @Transactional
     public void delete(Long id) {
         KpiMeasurement measurement = findOrThrow(id);
+        // Soft delete — record stays in the table for audit/correction history
         measurement.setIsDeleted(true);
         measurementRepository.save(measurement);
     }

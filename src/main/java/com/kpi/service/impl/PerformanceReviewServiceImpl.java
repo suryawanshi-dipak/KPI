@@ -99,7 +99,7 @@ public class PerformanceReviewServiceImpl implements PerformanceReviewService {
         review.setPeriodLabel(request.getPeriodLabel());
         review.setPeriodStart(request.getPeriodStart());
         review.setPeriodEnd(request.getPeriodEnd());
-        // Status is intentionally not updated here — use /submit and /approve endpoints
+        // Status is intentionally not set here — only /submit and /approve can advance the workflow
         review.setKraComments(request.getKraComments());
         review.setOverallScore(request.getOverallScore());
 
@@ -132,9 +132,11 @@ public class PerformanceReviewServiceImpl implements PerformanceReviewService {
     @Transactional
     public void delete(Integer id) {
         PerformanceReview review = findOrThrow(id);
+        // Approved reviews are locked — deleting would break the audit trail for finalized appraisals
         if (review.getStatus() == ReviewStatus.approved) {
             throw new BadRequestException("Approved reviews cannot be deleted");
         }
+        // Soft delete — physical removal never happens
         review.setIsDeleted(true);
         reviewRepository.save(review);
     }

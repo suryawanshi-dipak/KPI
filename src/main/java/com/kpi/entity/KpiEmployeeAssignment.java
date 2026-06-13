@@ -30,6 +30,7 @@ public class KpiEmployeeAssignment {
     @Column(length = 100)
     private String team;
 
+    // @Builder.Default required so builder callers don't get null when they omit isPrimary
     @Column(name = "is_primary")
     @Builder.Default
     private Boolean isPrimary = false;
