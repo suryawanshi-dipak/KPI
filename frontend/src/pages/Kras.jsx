@@ -3,7 +3,7 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KraForm from "../forms/KraForm";
-import { listKras, listKpis, saveKra, getStats } from "../lib/store";
+import { listKras, listKpis, saveKra, getStats, deleteKra } from "../lib/store";
 
 export default function Kras() {
   const [kras, setKras] = useState(null);
@@ -19,6 +19,18 @@ export default function Kras() {
 
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
   async function handleSave(p){ setSaving(true); await saveKra(p); setSaving(false); setEditing(null); await load(); flash(p.id?"KRA updated":"KRA created"); }
+  
+  async function handleDelete(id, name) {
+    if (window.confirm(`Are you sure you want to delete the KRA area "${name}"?`)) {
+      try {
+        await deleteKra(id);
+        await load();
+        flash("KRA deleted");
+      } catch (err) {
+        alert(err.message || "Failed to delete KRA Area");
+      }
+    }
+  }
 
   if (!kras || !stats) return <Layout crumb={<b>KRA Areas</b>}><Spinner /></Layout>;
 
@@ -46,7 +58,10 @@ export default function Kras() {
                   <h3>{kra.area_name}</h3>
                   <div className="cell-sub" style={{marginTop:2}}>{kra.financial_year}</div>
                 </div>
-                <button className="icon-btn" title="Edit" onClick={() => setEditing(kra)}><Icon.edit /></button>
+                <div style={{ display: "flex", gap: "0.25rem" }}>
+                  <button className="icon-btn" title="Edit" onClick={() => setEditing(kra)}><Icon.edit /></button>
+                  <button className="icon-btn icon-btn--danger" title="Delete" onClick={() => handleDelete(kra.id, kra.area_name)} style={{ color: "var(--bad)" }}><Icon.trash /></button>
+                </div>
               </div>
               <div className="card__body">
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"0.5rem" }}>

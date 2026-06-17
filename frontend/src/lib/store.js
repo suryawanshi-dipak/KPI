@@ -43,31 +43,222 @@ export const ENUMS = {
   measurementStatus: ["green", "amber", "red", "critical", "unknown"],
 };
 
-/* ── KRA AREAS ─────────────────────────────────────────────── */
-export async function listKras() {
-  await delay();
-  return clone(db.kra_area.filter((k) => !k.is_deleted));
+/* ── JWT AUTH & MAPPING HELPERS ────────────────────────────── */
+
+// Cache the token in memory once loaded so we don't repeat file system reads/fetches unnecessarily.
+let cachedToken = null;
+
+/**
+ * Helper to strip optional prefixes like "token =", "token=", "bearer " etc.
+ * that may be present in the Token.txt file or localStorage.
+ */
+function cleanToken(rawText) {
+  if (!rawText) return "";
+  let cleaned = rawText.trim();
+  // Strip starting "token =" or "token=" or "Token =" or "Token=" or "bearer " (case-insensitive)
+  cleaned = cleaned.replace(/^(token\s*=\s*|bearer\s+)/i, "");
+  return cleaned;
 }
-export async function getKra(id) {
-  await delay();
-  return clone(db.kra_area.find((k) => Number(k.id) === Number(id)) || null);
-}
-export async function saveKra(payload) {
-  await delay();
-  if (payload.id) {
-    const i = db.kra_area.findIndex((k) => Number(k.id) === Number(payload.id));
-    db.kra_area[i] = { ...db.kra_area[i], ...payload };
-    return clone(db.kra_area[i]);
+
+/**
+ * Retrieves the JWT token for backend API authentication.
+ * Looks up the token sequentially from:
+ * 1. An in-memory cache
+ * 2. Public served files: /Token.txt or /token.txt
+ * 3. Browser local storage (key: 'token')
+ */
+async function getToken() {
+  if (cachedToken) return cachedToken;
+  try {
+    const res = await fetch("/Token.txt");
+    if (res.ok) {
+      const text = await res.text();
+      cachedToken = cleanToken(text);
+      return cachedToken;
+    }
+  } catch (e) {
+    // Ignore and proceed to try lowercase token.txt
   }
-  const rec = {
-    id: nextId("kra_area"),
-    sort_order: db.kra_area.length + 1,
-    is_active: 1,
-    created_at: new Date().toISOString(),
-    ...payload,
+  try {
+    const res = await fetch("/token.txt");
+    if (res.ok) {
+      const text = await res.text();
+      cachedToken = cleanToken(text);
+      return cachedToken;
+    }
+  } catch (e) {
+    // Ignore and fall back to localStorage
+  }
+  const localVal = localStorage.getItem("token") || "";
+  cachedToken = cleanToken(localVal);
+  return cachedToken;
+}
+
+/**
+ * Maps a KRA Area database response (camelCase) to frontend's expected format (snake_case).
+ */
+function mapKraToFrontend(b) {
+  if (!b) return null;
+  return {
+    id: b.id,
+    area_name: b.areaName,
+    financial_year: b.financialYear,
+    sort_order: b.sortOrder,
+    is_active: b.isActive ? 1 : 0, // Frontend uses numeric 1/0 for boolean flags
+    created_at: b.createdAt,
+    updated_at: b.updatedAt,
   };
-  db.kra_area.push(rec);
-  return clone(rec);
+}
+
+/**
+ * Maps frontend KRA Area form model (snake_case) to backend request payload (camelCase).
+ */
+function mapKraToBackend(f) {
+  if (!f) return null;
+  return {
+    areaName: f.area_name,
+    financialYear: f.financial_year,
+    sortOrder: f.sort_order === "" || f.sort_order === null || f.sort_order === undefined ? null : Number(f.sort_order),
+    isActive: f.is_active === 1 || f.is_active === true,
+  };
+}
+
+/* ── KRA AREAS ─────────────────────────────────────────────── */
+
+/**
+ * Retrieves all KRA Areas from the backend API.
+ * Updates local db.kra_area state to keep dependent pages and helpers in sync.
+ */
+export async function listKras() {
+  try {
+    const token = await getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const res = await fetch("http://localhost:8080/kpi/api/v1/kra-areas", { headers });
+    if (!res.ok) throw new Error("Failed to fetch KRA Areas");
+    
+    const json = await res.json();
+    const list = (json.data || []).map(mapKraToFrontend);
+    
+    // Sync local DB cache
+    db.kra_area = list;
+    return list;
+  } catch (err) {
+    console.error("listKras error:", err);
+    // Fall back to current mock seed data/in-memory list if API is unreachable
+    return clone(db.kra_area.filter((k) => !k.is_deleted));
+  }
+}
+
+/**
+ * Retrieves a single KRA Area by its ID from the backend API.
+ * Updates local db.kra_area array with the fresh data.
+ */
+export async function getKra(id) {
+  try {
+    const token = await getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const res = await fetch(`http://localhost:8080/kpi/api/v1/kra-areas/${id}`, { headers });
+    if (!res.ok) throw new Error(`Failed to fetch KRA Area ${id}`);
+    
+    const json = await res.json();
+    const item = mapKraToFrontend(json.data);
+    
+    // Sync local DB cache
+    const idx = db.kra_area.findIndex((k) => Number(k.id) === Number(id));
+    if (idx !== -1) {
+      db.kra_area[idx] = item;
+    } else {
+      db.kra_area.push(item);
+    }
+    return item;
+  } catch (err) {
+    console.error(`getKra(${id}) error:`, err);
+    // Fallback to local cache lookup
+    return clone(db.kra_area.find((k) => Number(k.id) === Number(id)) || null);
+  }
+}
+
+/**
+ * Saves (creates or updates) a KRA Area by calling the backend API.
+ * POSTs to /kra-areas for new areas; PUTs to /kra-areas/{id} for edits.
+ * Updates local db.kra_area array with the persisted backend state.
+ */
+export async function saveKra(payload) {
+  try {
+    const token = await getToken();
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const isEdit = !!payload.id;
+    const url = isEdit
+      ? `http://localhost:8080/kpi/api/v1/kra-areas/${payload.id}`
+      : "http://localhost:8080/kpi/api/v1/kra-areas";
+    const method = isEdit ? "PUT" : "POST";
+    
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(mapKraToBackend(payload)),
+    });
+    
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to save KRA Area");
+    }
+    
+    const json = await res.json();
+    const item = mapKraToFrontend(json.data);
+    
+    // Sync local DB cache
+    const idx = db.kra_area.findIndex((k) => Number(k.id) === Number(item.id));
+    if (idx !== -1) {
+      db.kra_area[idx] = item;
+    } else {
+      db.kra_area.push(item);
+    }
+    return item;
+  } catch (err) {
+    console.error("saveKra error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Deletes a KRA Area by calling the backend API (soft delete).
+ * Updates local db.kra_area state by removing it to keep the UI in sync.
+ */
+export async function deleteKra(id) {
+  try {
+    const token = await getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const res = await fetch(`http://localhost:8080/kpi/api/v1/kra-areas/${id}`, {
+      method: "DELETE",
+      headers,
+    });
+    
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to delete KRA Area");
+    }
+    
+    // Sync local DB cache by removing the deleted KRA Area
+    const idx = db.kra_area.findIndex((k) => Number(k.id) === Number(id));
+    if (idx !== -1) {
+      db.kra_area.splice(idx, 1);
+    }
+    return true;
+  } catch (err) {
+    console.error("deleteKra error:", err);
+    throw err;
+  }
 }
 
 /* ── KPI METRICS ───────────────────────────────────────────── */
