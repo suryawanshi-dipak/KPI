@@ -5,7 +5,7 @@ import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KpiForm from "../forms/KpiForm";
 import MeasurementForm from "../forms/MeasurementForm";
-import { listKpis, saveKpi, getStats, kraName, saveMeasurement } from "../lib/store";
+import { listKpis, saveKpi, getStats, kraName, saveMeasurement , deleteKpi } from "../lib/store";
 
 export default function Kpis() {
   const [kpis, setKpis] = useState(null);
@@ -30,6 +30,21 @@ export default function Kpis() {
     await load();
     flash(payload.id ? "KPI updated" : "KPI created");
   }
+
+async function handleDelete(id) {
+  if (!window.confirm("Are you Sure , You want to Delete this KPI ?")) return;
+
+  setSaving(true);
+
+  try {
+    await deleteKpi(id);
+    await load();
+    flash("KPI deleted");
+  } finally {
+    setSaving(false);
+  }
+}
+
 
   async function handleMeasure(payload) {
     setSaving(true);
@@ -104,6 +119,9 @@ export default function Kpis() {
                         <button className="icon-btn" title="Edit" onClick={() => setEditing(k)}>
                           <Icon.edit />
                         </button>
+                        <button className="icon-btn" title="Delete KPI" onClick={() => handleDelete(k.id)}  style={{ color: "var(--bad)" }}>
+                          <Icon.trash />                                  
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -138,4 +156,8 @@ export default function Kpis() {
     </Layout>
   );
 }
-function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function cap(s) {
+  return s
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase());
+}

@@ -33,7 +33,7 @@ function nextId(table) {
 export const ENUMS = {
   direction: ["higher_better", "lower_better"],
   unit: ["Percentage", "Count", "Hours", "Days"],
-  frequency: ["weekly", "bi-weekly", "monthly", "quarterly", "per release", "per commit"],
+  frequency: ["weekly", "bi_weekly", "monthly", "quarterly", "per_release", "per_commit" ],
   role: ["admin", "manager", "employee", "hr"],
   department: ["IT", "HR", "Management", "Operations", "Release"],
   status: ["active", "inactive"],
@@ -42,6 +42,9 @@ export const ENUMS = {
   team: ["Scrum", "Kanban", "Operations"],
   measurementStatus: ["green", "amber", "red", "critical", "unknown"],
 };
+
+
+
 
 /* ── JWT AUTH & MAPPING HELPERS ────────────────────────────── */
 
@@ -110,6 +113,69 @@ function mapKraToFrontend(b) {
   };
 }
 
+// Mapping Kpi database response to Frontend
+function mapKpiToFrontend(b) {
+  if (!b) return null;
+
+  return {
+    id: b.id,
+    kra_area_id: b.kraAreaId,
+    name: b.name,
+    target_expression: b.targetExpression,
+    direction: b.direction,
+    target_value: b.targetValue,
+    warn_threshold: b.warnThreshold,
+    critical_threshold: b.criticalThreshold,
+    unit: b.unit,
+    frequency: b.frequency,
+    source_system: b.sourceSystem,
+    source_reference: b.sourceReference,
+    measurement_instruction: b.measurementInstruction,
+    is_active: b.isActive ? 1 : 0,
+    version: b.version,
+    created_at: b.createdAt,
+    updated_at: b.updatedAt,
+    is_deleted: b.isDeleted ? 1 : 0
+  };
+}
+
+
+// Mapped KPI measurement database response to Frontend
+
+function mapMeasurementToFrontend(b) {
+  if (!b) return null;
+
+  return {
+    id: b.id,
+    kpi_metric_id: b.kpiMetricId,
+    kpi_metric_name: b.kpiMetricName,
+    kra_area_id: b.kraAreaId,
+    kra_area_name: b.kraAreaName,
+    kpi_metric_version: b.kpiMetricVersion,
+    measured_value: b.measuredValue,
+    measurement_period_type: b.measurementPeriodType,
+    measurement_period_label: b.measurementPeriodLabel,
+    period_start_date: b.periodStartDate,
+    period_end_date: b.periodEndDate,
+    status: b.status,
+    measurement_note: b.measurementNote,
+    raw_payload: b.rawPayload,
+    post_action: b.postAction,
+    measured_at: b.measuredAt,
+    measured_by: b.measuredById,
+    measured_by_name: b.measuredByName,
+    is_system_generated: b.isSystemGenerated ? 1 : 0,
+    is_pending: b.isPending ? 1 : 0,
+    pending_reason: b.pendingReason,
+    is_corrected: b.isCorrected ? 1 : 0,
+    corrected_from_id: b.correctedFromId,
+    created_at: b.createdAt,
+    updated_at: b.updatedAt
+  };
+}
+
+
+
 /**
  * Maps frontend KRA Area form model (snake_case) to backend request payload (camelCase).
  */
@@ -120,6 +186,53 @@ function mapKraToBackend(f) {
     financialYear: f.financial_year,
     sortOrder: f.sort_order === "" || f.sort_order === null || f.sort_order === undefined ? null : Number(f.sort_order),
     isActive: f.is_active === 1 || f.is_active === true,
+  };
+}
+
+// Mapping frontend kpi configuration with backend request payload.
+
+function mapKpiToBackend(f) {
+  if (!f) return null;
+
+  return {
+    kraAreaId: f.kra_area_id,
+    name: f.name,
+    targetExpression: f.target_expression,
+    direction: f.direction,
+    targetValue: f.target_value,
+    warnThreshold: f.warn_threshold,
+    criticalThreshold: f.critical_threshold,
+    unit: f.unit,
+    frequency: f.frequency,
+    sourceSystem: f.source_system,
+    sourceReference: f.source_reference,
+    measurementInstruction: f.measurement_instruction,
+    isActive: f.is_active === 1 || f.is_active === true
+  };
+}
+
+
+// Mapped Frontend Kpi Measurement inputs to backend measurement database.
+
+function mapMeasurementToBackend(f) {
+  if (!f) return null;
+
+  return {
+    kpiMetricId: f.kpi_metric_id,
+    measuredValue: f.measured_value,
+    measurementPeriodType: f.measurement_period_type,
+    measurementPeriodLabel: f.measurement_period_label,
+    periodStartDate: f.period_start_date,
+    periodEndDate: f.period_end_date,
+    status: f.status,
+    measurementNote: f.measurement_note,
+    rawPayload: f.raw_payload,
+    postAction: f.post_action,
+    measuredById: f.measured_by,
+    isSystemGenerated: f.is_system_generated === 1 || f.is_system_generated === true,
+    isPending: f.is_pending === 1 || f.is_pending === true,
+    pendingReason: f.pending_reason,
+    correctedFromId: f.corrected_from_id
   };
 }
 
@@ -263,29 +376,193 @@ export async function deleteKra(id) {
 
 /* ── KPI METRICS ───────────────────────────────────────────── */
 export async function listKpis() {
-  await delay();
-  return clone(db.kpi_metric.filter((k) => !k.is_deleted));
-}
-export async function getKpi(id) {
-  await delay();
-  return clone(db.kpi_metric.find((k) => Number(k.id) === Number(id)) || null);
-}
-export async function saveKpi(payload) {
-  await delay();
-  if (payload.id) {
-    const i = db.kpi_metric.findIndex((k) => Number(k.id) === Number(payload.id));
-    db.kpi_metric[i] = { ...db.kpi_metric[i], ...payload };
-    return clone(db.kpi_metric[i]);
+  try {
+    const token = await getToken();
+
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      "http://localhost:8080/kpi/api/v1/kpi-metrics",
+      { headers }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch KPI Metrics");
+    }
+
+    const json = await res.json();
+
+    const list = (json.data || []).map(mapKpiToFrontend);
+
+    db.kpi_metric = list;
+
+    return list;
+  } catch (err) {
+    console.error("listKpis error:", err);
+
+    return clone(
+      db.kpi_metric.filter((k) => !k.is_deleted)
+    );
   }
-  const rec = {
-    id: nextId("kpi_metric"),
-    is_active: 1,
-    version: 1,
-    created_at: new Date().toISOString(),
-    ...payload,
-  };
-  db.kpi_metric.push(rec);
-  return clone(rec);
+}
+
+
+export async function getKpi(id) {
+  try {
+    const token = await getToken();
+
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `http://localhost:8080/kpi/api/v1/kpi-metrics/${id}`,
+      { headers }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch KPI Metric ${id}`);
+    }
+
+    const json = await res.json();
+
+    const item = mapKpiToFrontend(json.data);
+
+    const idx = db.kpi_metric.findIndex(
+      k => Number(k.id) === Number(id)
+    );
+
+    if (idx !== -1) {
+      db.kpi_metric[idx] = item;
+    } else {
+      db.kpi_metric.push(item);
+    }
+
+    return item;
+
+  } catch (err) {
+
+    console.error(`getKpi(${id}) error:`, err);
+
+    return clone(
+      db.kpi_metric.find(
+        k => Number(k.id) === Number(id)
+      ) || null
+    );
+  }
+}
+
+
+
+export async function saveKpi(payload) {
+
+  try {
+
+    const token = await getToken();
+
+    const headers = {
+      "Content-Type": "application/json"
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const isEdit = !!payload.id;
+
+    const url = isEdit
+      ? `http://localhost:8080/kpi/api/v1/kpi-metrics/${payload.id}`
+      : "http://localhost:8080/kpi/api/v1/kpi-metrics";
+
+    const method = isEdit ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(mapKpiToBackend(payload))
+    });
+
+    if (!res.ok) {
+
+      const errorJson = await res.json().catch(() => ({}));
+
+      throw new Error(
+        errorJson.message || "Failed to save KPI Metric"
+      );
+    }
+
+    const json = await res.json();
+
+    const item = mapKpiToFrontend(json.data);
+
+    const idx = db.kpi_metric.findIndex(
+      k => Number(k.id) === Number(item.id)
+    );
+
+    if (idx !== -1) {
+      db.kpi_metric[idx] = item;
+    } else {
+      db.kpi_metric.push(item);
+    }
+
+    return item;
+
+  } catch (err) {
+
+    console.error("saveKpi error:", err);
+
+    throw err;
+  }
+}
+
+/**
+ * Deletes a KPI Metric by calling the backend API.
+ * Updates local db.kpi_metric state by removing it to keep the UI in sync.
+ */
+export async function deleteKpi(id) {
+  try {
+    const token = await getToken();
+
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `http://localhost:8080/kpi/api/v1/kpi-metrics/${id}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+
+      throw new Error(
+        errorJson.message || "Failed to delete KPI Metric"
+      );
+    }
+
+    // Sync local cache by removing deleted KPI
+    const idx = db.kpi_metric.findIndex(
+      (k) => Number(k.id) === Number(id)
+    );
+
+    if (idx !== -1) {
+      db.kpi_metric.splice(idx, 1);
+    }
+
+    return true;
+
+  } catch (err) {
+    console.error("deleteKpi error:", err);
+    throw err;
+  }
 }
 
 /* ── EMPLOYEES ─────────────────────────────────────────────── */
@@ -326,31 +603,234 @@ export async function assignmentsForKpi(kpiId) {
 
 /* ── MEASUREMENTS ──────────────────────────────────────────── */
 export async function listMeasurements() {
-  await delay();
-  return clone(db.kpi_measurement.filter((m) => !m.is_deleted));
+  try {
+
+    const token = await getToken();
+
+    const headers = {};
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      "http://localhost:8080/kpi/api/v1/kpi-measurements",
+      { headers }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch measurements");
+    }
+
+    const json = await res.json();
+
+    const list = (json.data || []).map(mapMeasurementToFrontend);
+
+    db.kpi_measurement = list;
+
+    return list;
+
+  } catch (err) {
+
+    console.error("listMeasurements error:", err);
+
+    return clone(db.kpi_measurement);
+  }
 }
+
+
 export async function measurementsForKpi(kpiId) {
-  await delay();
-  return clone(
-    db.kpi_measurement
-      .filter((m) => Number(m.kpi_metric_id) === Number(kpiId) && !m.is_deleted)
-      .sort((a, b) => String(a.period_start_date).localeCompare(String(b.period_start_date)))
-  );
+
+  try {
+
+    const token = await getToken();
+
+    const headers = {};
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `http://localhost:8080/kpi/api/v1/kpi-measurements?metricId=${kpiId}`,
+      { headers }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch KPI measurements");
+    }
+
+    const json = await res.json();
+
+    return (json.data || [])
+      .map(mapMeasurementToFrontend)
+      .sort(
+        (a, b) =>
+          String(a.period_start_date).localeCompare(
+            String(b.period_start_date)
+          )
+      );
+
+  } catch (err) {
+
+    console.error("measurementsForKpi error:", err);
+
+    return clone(
+      db.kpi_measurement
+        .filter(
+          (m) =>
+            Number(m.kpi_metric_id) === Number(kpiId)
+        )
+    );
+  }
 }
+
+
 export async function saveMeasurement(payload) {
-  await delay();
-  const rec = {
-    id: nextId("kpi_measurement"),
-    is_system_generated: 0,
-    is_pending: 0,
-    is_corrected: 0,
-    measured_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    ...payload,
-  };
-  db.kpi_measurement.push(rec);
-  return clone(rec);
+
+  try {
+
+    const token = await getToken();
+
+    const headers = {
+      "Content-Type": "application/json"
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const isEdit = !!payload.id;
+
+    const url = isEdit
+      ? `http://localhost:8080/kpi/api/v1/kpi-measurements/${payload.id}`
+      : "http://localhost:8080/kpi/api/v1/kpi-measurements";
+
+    const method = isEdit ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(
+        mapMeasurementToBackend(payload)
+      )
+    });
+
+    if (!res.ok) {
+
+      const errJson =
+        await res.json().catch(() => ({}));
+
+      throw new Error(
+        errJson.message ||
+        "Failed to save measurement"
+      );
+    }
+
+    const json = await res.json();
+
+    const rec = mapMeasurementToFrontend(
+      json.data
+    );
+
+    const idx = db.kpi_measurement.findIndex(
+      (m) => Number(m.id) === Number(rec.id)
+    );
+
+    if (idx !== -1) {
+      db.kpi_measurement[idx] = rec;
+    } else {
+      db.kpi_measurement.push(rec);
+    }
+
+    return rec;
+
+  } catch (err) {
+
+    console.error("saveMeasurement error:", err);
+
+    throw err;
+  }
+}
+
+
+export async function getMeasurement(id) {
+  try {
+
+    const token = await getToken();
+
+    const headers = {};
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `http://localhost:8080/kpi/api/v1/kpi-measurements/${id}`,
+      { headers }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch measurement");
+    }
+
+    const json = await res.json();
+
+    return mapMeasurementToFrontend(json.data);
+
+  } catch (err) {
+
+    console.error("getMeasurement error:", err);
+
+    throw err;
+  }
+}
+
+
+export async function deleteMeasurement(id) {
+
+  try {
+
+    const token = await getToken();
+
+    const headers = {};
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `http://localhost:8080/kpi/api/v1/kpi-measurements/${id}`,
+      {
+        method: "DELETE",
+        headers
+      }
+    );
+
+    if (!res.ok) {
+
+      const errJson =
+        await res.json().catch(() => ({}));
+
+      throw new Error(
+        errJson.message ||
+        "Failed to delete measurement"
+      );
+    }
+
+    db.kpi_measurement =
+      db.kpi_measurement.filter(
+        m => Number(m.id) !== Number(id)
+      );
+
+    return true;
+
+  } catch (err) {
+
+    console.error("deleteMeasurement error:", err);
+
+    throw err;
+  }
 }
 
 /* ── DERIVED HELPERS ───────────────────────────────────────── */

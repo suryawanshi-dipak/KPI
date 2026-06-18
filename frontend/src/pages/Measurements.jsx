@@ -3,12 +3,13 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
-import { listMeasurements, listKpis, saveMeasurement, employeeName } from "../lib/store";
+import {listMeasurements, listKpis , saveMeasurement, deleteMeasurement, employeeName} from "../lib/store";
 
 export default function Measurements() {
   const [rows, setRows] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [q, setQ] = useState("");
@@ -19,7 +20,63 @@ export default function Measurements() {
 
   const kpiName = (id) => kpis.find((k) => Number(k.id) === Number(id))?.name || "—";
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
-  async function handleSave(p){ setSaving(true); await saveMeasurement(p); setSaving(false); setAdding(false); await load(); flash("Measurement saved"); }
+  
+  
+  async function handleSave(p) {
+
+  setSaving(true);
+
+  try {
+
+    await saveMeasurement(p);
+
+    setAdding(false);
+    setEditing(null);
+
+    await load();
+
+    flash(
+      p.id
+        ? "Measurement updated"
+        : "Measurement saved"
+    );
+
+  } finally {
+
+    setSaving(false);
+
+  }
+}
+
+
+async function handleDelete(id) {
+
+  if (
+    !window.confirm(
+      "Delete this measurement?"
+    )
+  ) {
+    return;
+  }
+
+  setSaving(true);
+
+  try {
+
+    await deleteMeasurement(id);
+
+    await load();
+
+    flash("Measurement deleted");
+
+  } finally {
+
+    setSaving(false);
+
+  }
+
+}
+
 
   if (!rows) return <Layout crumb={<b>Measurements</b>}><Spinner /></Layout>;
 
@@ -43,7 +100,9 @@ export default function Measurements() {
           <table className="data">
             <thead><tr>
               <th>KPI</th><th>Period</th><th>Value</th><th>Status</th>
-              <th>Recorded by</th><th>Note</th>
+              <th>Recorded by</th>
+                 <th>Note</th>
+                  <th></th>
             </tr></thead>
             <tbody>
               {filtered.map((m) => (
@@ -57,6 +116,13 @@ export default function Measurements() {
                   <td><StatusPill status={m.status} /></td>
                   <td className="cell-sub">{employeeName(m.measured_by)}</td>
                   <td className="cell-sub" style={{ maxWidth: 260 }}>{m.is_pending ? `Pending: ${m.pending_reason||""}` : (m.measurement_note || "—")}</td>
+                  <td>
+  <div className="cell-actions">
+
+    <button className="icon-btn" title="Edit" onClick={() => setEditing(m)} ><Icon.edit /></button>
+    <button className="icon-btn" title="Delete Measurement" onClick={() => handleDelete(m.id)}  style={{ color: "var(--bad)" }}><Icon.trash /></button>
+  </div>
+</td>
                 </tr>
               ))}
             </tbody>
@@ -69,6 +135,12 @@ export default function Measurements() {
           <MeasurementForm saving={saving} onSubmit={handleSave} onCancel={() => setAdding(false)} />
         </Modal>
       )}
+
+      {editing && (
+  <Modal title="Edit measurement" subtitle={kpiName(editing.kpi_metric_id)} onClose={() => setEditing(null)} wide>
+    <MeasurementForm initial={editing} saving={saving} onSubmit={handleSave} onCancel={() => setEditing(null)}/>
+  </Modal>
+)}
       {toast && <Toast message={toast} />}
     </Layout>
   );
