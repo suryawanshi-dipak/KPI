@@ -23,6 +23,7 @@ db.kpi_measurement ||= [];
 
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 const clone = (x) => JSON.parse(JSON.stringify(x));
+const API_BASE = "http://localhost:8080/kpi/api/v1";
 
 function nextId(table) {
   const ids = db[table].map((r) => Number(r.id) || 0);
@@ -174,6 +175,27 @@ function mapMeasurementToFrontend(b) {
   };
 }
 
+// Mapping kpi employee assignment API to Frontend
+function mapAssignmentToFrontend(a) {
+  return {
+    id: a.id,
+    kpi_metric_id: a.kpiMetricId,
+    kpi_metric_name: a.kpiMetricName,
+    kra_area_id: a.kraAreaId,
+    kra_area_name: a.kraAreaName,
+    employee_id: a.employeeId,
+    employee_name: a.employeeName,
+    team: a.team || "",
+    is_primary: a.isPrimary ? 1 : 0,
+    assigned_from: a.assignedFrom,
+    assigned_to: a.assignedTo,
+    created_at: a.createdAt,
+    updated_at: a.updatedAt,
+    created_by: a.createdBy,
+    updated_by: a.updatedBy,
+  };
+}
+
 
 
 /**
@@ -233,6 +255,18 @@ function mapMeasurementToBackend(f) {
     isPending: f.is_pending === 1 || f.is_pending === true,
     pendingReason: f.pending_reason,
     correctedFromId: f.corrected_from_id
+  };
+}
+
+// Mapping Frontend with kpi assignment API
+function mapAssignmentToBackend(a) {
+  return {
+    kpiMetricId: Number(a.kpi_metric_id),
+    employeeId: Number(a.employee_id),
+    team: a.team || null,
+    isPrimary: !!a.is_primary,
+    assignedFrom: a.assigned_from || null,
+    assignedTo: a.assigned_to || null,
   };
 }
 
@@ -593,13 +627,146 @@ export async function saveEmployee(payload) {
 
 /* ── ASSIGNMENTS ───────────────────────────────────────────── */
 export async function listAssignments() {
-  await delay();
-  return clone(db.kpi_employee_assignment);
+  const token = await getToken();
+
+  const res = await fetch(`${API_BASE}/kpi-assignments`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok)
+    throw new Error("Failed to fetch KPI assignments");
+
+  const json = await res.json();
+
+  return json.data.map(mapAssignmentToFrontend);
 }
+
+export async function getAssignment(id) {
+  const token = await getToken();
+
+  const res = await fetch(
+    `${API_BASE}/kpi-assignments/${id}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok)
+    throw new Error("Failed to fetch assignment");
+
+  const json = await res.json();
+
+  return mapAssignmentToFrontend(json.data);
+}
+
+
 export async function assignmentsForKpi(kpiId) {
-  await delay();
-  return clone(db.kpi_employee_assignment.filter((a) => Number(a.kpi_metric_id) === Number(kpiId)));
+  const token = await getToken();
+
+  const res = await fetch(
+    `${API_BASE}/kpi-assignments/metric/${kpiId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok)
+    throw new Error("Failed to fetch KPI assignments");
+
+  const json = await res.json();
+
+  return json.data.map(mapAssignmentToFrontend);
 }
+
+
+
+export async function assignmentsForEmployee(employeeId) {
+  const token = await getToken();
+
+  const res = await fetch(
+    `${API_BASE}/kpi-assignments/employee/${employeeId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok)
+    throw new Error("Failed to fetch employee assignments");
+
+  const json = await res.json();
+
+  return json.data.map(mapAssignmentToFrontend);
+}
+
+
+
+export async function saveAssignment(payload) {
+  const token = await getToken();
+
+  const body = {
+    kpiMetricId: payload.kpi_metric_id,
+    employeeId: payload.employee_id,
+    team: payload.team,
+    isPrimary: payload.is_primary,
+    assignedFrom: payload.assigned_from,
+    assignedTo: payload.assigned_to,
+  };
+    const response = await fetch(
+    `${API_BASE}/kpi-assignments${payload.id ? `/${payload.id}` : ""}`,
+    {
+      method: payload.id ? "PUT" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  const json = await response.json();
+  if (!response.ok || !json.success) {
+    throw new Error(json.message || "Failed to save assignment");
+  }
+  return mapAssignmentToFrontend(json.data);
+}
+
+
+
+export async function deleteAssignment(id) {
+
+  const token = await getToken();
+
+  const response = await fetch(
+    `${API_BASE}/kpi-assignments/${id}`,
+    {
+      method: "DELETE",
+
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+
+  const json = await response.json();
+
+  if (!response.ok || !json.success) {
+
+    throw new Error(
+      json.message || "Failed to delete assignment"
+    );
+
+  }
+
+  return true;
+}
+
 
 /* ── MEASUREMENTS ──────────────────────────────────────────── */
 export async function listMeasurements() {
