@@ -600,13 +600,75 @@ export async function deleteKpi(id) {
 }
 
 /* ── EMPLOYEES ─────────────────────────────────────────────── */
+
+/**
+ * Retrieves all employees from the backend API.
+ * Updates local db.employees state to keep dependent pages and helpers in sync.
+ */
 export async function listEmployees() {
-  await delay();
-  return clone(db.employees.filter((e) => !e.is_deleted));
+  try {
+    const token = await getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const res = await fetch(`${API_BASE}/employees`, { headers });
+    if (!res.ok) throw new Error("Failed to fetch employees");
+    
+    const json = await res.json();
+    const list = (json.data || []).map((b) => ({
+      id: b.id,
+      name: b.name,
+      email: b.email,
+      designation: b.designation,
+      department: b.department,
+      status: "active",
+      is_deleted: false,
+    }));
+    
+    db.employees = list;
+    return list;
+  } catch (err) {
+    console.error("listEmployees error:", err);
+    return clone(db.employees.filter((e) => !e.is_deleted));
+  }
 }
+
+/**
+ * Retrieves a single employee by their ID from the backend API.
+ * Updates local db.employees array with the fresh data.
+ */
 export async function getEmployee(id) {
-  await delay();
-  return clone(db.employees.find((e) => Number(e.id) === Number(id)) || null);
+  try {
+    const token = await getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    
+    const res = await fetch(`${API_BASE}/employees/${id}`, { headers });
+    if (!res.ok) throw new Error(`Failed to fetch employee ${id}`);
+    
+    const json = await res.json();
+    const b = json.data;
+    const item = {
+      id: b.id,
+      name: b.name,
+      email: b.email,
+      designation: b.designation,
+      department: b.department,
+      status: "active",
+      is_deleted: false,
+    };
+    
+    const idx = db.employees.findIndex((e) => Number(e.id) === Number(id));
+    if (idx !== -1) {
+      db.employees[idx] = item;
+    } else {
+      db.employees.push(item);
+    }
+    return item;
+  } catch (err) {
+    console.error(`getEmployee(${id}) error:`, err);
+    return clone(db.employees.find((e) => Number(e.id) === Number(id)) || null);
+  }
 }
 export async function saveEmployee(payload) {
   await delay();
@@ -1002,9 +1064,20 @@ export async function deleteMeasurement(id) {
 
 /* ── DERIVED HELPERS ───────────────────────────────────────── */
 export async function getStats() {
-  await delay();
+  try {
+    // Fetch all fresh database records in parallel first to populate local caches
+    await Promise.all([
+      listKras(),
+      listKpis(),
+      listEmployees(),
+      listMeasurements()
+    ]);
+  } catch (err) {
+    console.error("getStats parallel fetch error:", err);
+  }
+
   const kpis = db.kpi_metric.filter((k) => !k.is_deleted);
-  // latest measurement per kpi
+  // Calculate the latest measurement per KPI based on start date
   const latestByKpi = {};
   db.kpi_measurement
     .filter((m) => !m.is_deleted)
