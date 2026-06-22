@@ -28,6 +28,17 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", id));
     }
 
+    
+    @Override
+public List<EmployeeResponse> getEmployeesByManager(Integer managerId) {
+    return employeeRepository.findByManager_Id(managerId)
+            .stream()
+            .map(this::toResponse)
+            .toList();
+}
+
+
+
     private EmployeeResponse toResponse(Employee e) {
         String fullName = ((e.getFirstName() != null ? e.getFirstName() : "") + " "
                 + (e.getLastName() != null ? e.getLastName() : "")).trim();
@@ -39,6 +50,13 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .email(e.getEmail())
                 .designation(e.getDesignation())
                 .department(e.getDepartment())
+                .managerId(
+                    e.getManager() != null
+                        ? e.getManager().getId()
+                        : null
+                )
+                .role(e.getRole().name())
+
                 .build();
     }
 }

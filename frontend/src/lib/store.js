@@ -98,6 +98,20 @@ async function getToken() {
   return cachedToken;
 }
 
+
+function authHeaders(token) {
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
+
 /**
  * Maps a KRA Area database response (camelCase) to frontend's expected format (snake_case).
  */
@@ -616,15 +630,17 @@ export async function listEmployees() {
     
     const json = await res.json();
     const list = (json.data || []).map((b) => ({
-      id: b.id,
-      name: b.name,
-      email: b.email,
-      designation: b.designation,
-      department: b.department,
-      status: "active",
-      is_deleted: false,
-    }));
-    
+  id: b.id,
+  name: b.name,
+  email: b.email,
+  designation: b.designation,
+  department: b.department,
+  role: b.role,
+  managerId: b.managerId,
+  status: "active",
+  is_deleted: false,
+}));
+    console.log(list);
     db.employees = list;
     return list;
   } catch (err) {
@@ -670,6 +686,27 @@ export async function getEmployee(id) {
     return clone(db.employees.find((e) => Number(e.id) === Number(id)) || null);
   }
 }
+
+
+// export async function employeesByManager(managerId) {
+//   const token = await getToken();
+
+//   const res = await fetch(
+//     `${API_BASE}/employees/manager/${managerId}`,
+//     {
+//       headers: authHeaders(token),
+//     }
+//   );
+
+//   if (!res.ok)
+//     throw new Error("Failed to load employees");
+
+//   const json = await res.json();
+
+//   return json.data || [];
+// }
+
+
 export async function saveEmployee(payload) {
   await delay();
   if (payload.id) {
@@ -701,7 +738,7 @@ export async function listAssignments() {
     throw new Error("Failed to fetch KPI assignments");
 
   const json = await res.json();
-
+  console.log("Assignment API response ",json);
   return json.data.map(mapAssignmentToFrontend);
 }
 
@@ -828,6 +865,112 @@ export async function deleteAssignment(id) {
 
   return true;
 }
+// ________________________________________Team Dashboard _____________________________________
+
+
+export async function getTeamDashboard(currentUser) {
+
+  const [
+    employees,
+    assignments,
+    measurements
+  ] = await Promise.all([
+    listEmployees(),
+    listAssignments(),
+    listMeasurements()
+  ]);
+
+  let visibleEmployees;
+
+  if (currentUser.role === "admin") {
+
+    visibleEmployees = employees;
+
+  } else {
+
+    visibleEmployees =
+      employees.filter(
+        e => Number(e.managerId) === Number(currentUser.id)
+      );
+
+  }
+
+  return visibleEmployees.map(emp => {
+
+    const empAssignments =
+      assignments.filter(
+        a => Number(a.employeeId) === Number(emp.id)
+      );
+
+    let green = 0;
+    let amber = 0;
+    let red = 0;
+
+    empAssignments.forEach(a => {
+
+      const ms =
+        measurements.filter(
+          m =>
+            Number(m.kpiMetricId) ===
+            Number(a.kpiMetricId)
+        );
+
+      if (!ms.length)
+        return;
+
+      const latest =
+        ms.sort(
+          (a,b)=>
+            new Date(b.measuredAt) -
+            new Date(a.measuredAt)
+        )[0];
+
+      if (latest.status === "green")
+        green++;
+
+      else if (latest.status === "amber")
+        amber++;
+
+      else if (
+        latest.status === "red" ||
+        latest.status === "critical"
+      )
+        red++;
+
+    });
+
+    const total =
+      empAssignments.length || 1;
+
+    const health =
+      Math.round(
+        green * 100 / total
+      );
+
+    return {
+
+      id: emp.id,
+
+      name: emp.name,
+
+      role: emp.role,
+
+      totalKpis: empAssignments.length,
+
+      green,
+
+      amber,
+
+      red,
+
+      health
+
+    };
+
+  });
+
+}
+
 
 
 /* ── MEASUREMENTS ──────────────────────────────────────────── */
