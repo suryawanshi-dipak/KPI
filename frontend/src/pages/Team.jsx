@@ -1,69 +1,61 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import { Spinner } from "../components/UI";
-import {listEmployees, listAssignments, getStats} from "../lib/store";
+import { listEmployees, listAssignments, getStats, getCurrentUser } from "../lib/store";
 
 export default function Team() {
-
   const [people, setPeople] = useState(null);
   const [assign, setAssign] = useState([]);
   const [stats, setStats] = useState(null);
+  const navigate = useNavigate();
 
-  async function load() {
+  useEffect(() => {
+    async function load() {
+      try {
+        // Fetch dynamic user profile from the token
+        const currentUser = await getCurrentUser();
+        
+        // Authorization Check: If not admin or manager, redirect to dashboard home
+        if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "manager")) {
+          navigate("/");
+          return;
+        }
 
-    try {
-
-// until login is implemented , hard coding here the login user details 
-// when login will be implemented it will fetch login user data from loca Storage
-// const currentUser =
-//   JSON.parse(localStorage.getItem("user")) || {};
-
-      const currentUser = {
-  id: 25,        // manager's employee id
-  role: "manager"
-};
-
-      const [employees, assignments, statsData] =
-        await Promise.all([
+        // Fetch employees, assignments and stats in parallel from the backend
+        const [employees, assignments, statsData] = await Promise.all([
           listEmployees(),
           listAssignments(),
           getStats()
         ]);
 
-      let visibleMembers = [];
+        let visibleMembers = [];
 
-      if (currentUser.role === "admin") {
+        if (currentUser.role === "admin") {
+          // Admin sees everyone except other admin accounts
+          visibleMembers = employees.filter(
+            e => e.role !== "admin"
+          );
+        } else if (currentUser.role === "manager") {
+          // Manager sees only direct reports reporting to their employee ID
+          visibleMembers = employees.filter(
+            e => Number(e.managerId) === Number(currentUser.id)
+          );
+        }
 
-        // Admin sees everyone except admins
-        visibleMembers = employees.filter(
-          e => e.role !== "admin"
-        );
+        setPeople(visibleMembers);
+        setAssign(assignments);
+        setStats(statsData);
 
-      } else if (currentUser.role === "manager") {
-
-        // Manager sees only employees reporting to him
-        visibleMembers = employees.filter(
-          e => Number(e.managerId) === Number(currentUser.id)
-        );
-
+        console.log("Assignments", assignments);
+        console.log("Current User", currentUser);
+        console.log("Employees", employees);
+      } catch (err) {
+        console.error("Failed to load Team Dashboard data:", err);
       }
-
-      setPeople(visibleMembers);
-      setAssign(assignments);
-
-      console.log("Assignments", assign);
-      setStats(statsData);
-      console.log("Current User", currentUser);
-      console.log("Employees", employees);
-      
-      
-    } catch (err) {
-      console.error(err);
     }
-  }
-  useEffect(() => {
     load();
-  }, []);
+  }, [navigate]);
   
 
   if (!people || !stats)
@@ -96,10 +88,10 @@ export default function Team() {
           const myKpiIds = new Set(
             assign
               .filter(
-                a => Number(a.employeeId) === Number(m.id)
+                a => Number(a.employee_id) === Number(m.id)
               )
               .map(
-                a => Number(a.kpiMetricId)
+                a => Number(a.kpi_metric_id)
               )
           );
 

@@ -111,6 +111,46 @@ function authHeaders(token) {
   return headers;
 }
 
+let cachedCurrentUser = null;
+
+/**
+ * Retrieves the currently logged-in user profile by decoding the JWT token.
+ * It decodes the payload, extracts the 'sub' field (email), and searches for
+ * the matching employee in the list of all employees.
+ */
+export async function getCurrentUser() {
+  if (cachedCurrentUser) return cachedCurrentUser;
+  const token = await getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    
+    // Decode Base64Url payload safely
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(jsonPayload);
+    const email = payload.sub;
+    
+    // Load employees list and find the matching record by email
+    const employees = await listEmployees();
+    const current = employees.find((e) => e.email === email);
+    if (current) {
+      cachedCurrentUser = current;
+    }
+    return cachedCurrentUser;
+  } catch (err) {
+    console.error("getCurrentUser error:", err);
+    return null;
+  }
+}
+
 
 /**
  * Maps a KRA Area database response (camelCase) to frontend's expected format (snake_case).
@@ -899,7 +939,7 @@ export async function getTeamDashboard(currentUser) {
 
     const empAssignments =
       assignments.filter(
-        a => Number(a.employeeId) === Number(emp.id)
+        a => Number(a.employee_id) === Number(emp.id)
       );
 
     let green = 0;
@@ -911,8 +951,8 @@ export async function getTeamDashboard(currentUser) {
       const ms =
         measurements.filter(
           m =>
-            Number(m.kpiMetricId) ===
-            Number(a.kpiMetricId)
+            Number(m.kpi_metric_id) ===
+            Number(a.kpi_metric_id)
         );
 
       if (!ms.length)
