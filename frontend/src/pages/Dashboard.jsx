@@ -2,67 +2,208 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import Layout from "../components/Layout";
 import { Spinner, StatusPill } from "../components/UI";
-import { getStats, listKpis, listKras, measurementsForKpi, kraName } from "../lib/store";
+import { getStats, listKpis, listKras, measurementsForKpi, kraName , listAssignments , listEmployees , getCurrentUser } from "../lib/store";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [kpis, setKpis] = useState([]);
+  const [visibleKpis, setVisibleKpis] = useState([]);
   const [kras, setKras] = useState([]);
   const [trend, setTrend] = useState([]);
   const [trendKpi, setTrendKpi] = useState(null);
 
   useEffect(() => {
-    Promise.all([getStats(), listKpis(), listKras()]).then(([s, k, r]) => {
-      setStats(s); setKpis(k); setKras(r);
-      // pick a KPI with the most measurements for the trend preview
-      if (k.length) {
-        const first = k[0];
-        setTrendKpi(first);
-        measurementsForKpi(first.id).then((ms) =>
-          setTrend(ms.map((m) => ({ period: m.measurement_period_label, value: m.measured_value })))
-        );
+
+  async function load() {
+
+    try {
+
+      const currentUser = await getCurrentUser();
+
+      const [statsData, allKpis, allKras, assignments, employees] =
+        await Promise.all([
+          getStats(),
+          listKpis(),
+          listKras(),
+          listAssignments(),
+          listEmployees()
+        ]);
+
+      let allowedKpiIds = [];
+
+      if (currentUser.role === "admin") {
+
+        allowedKpiIds = allKpis.map(k => Number(k.id));
+
       }
-    });
-  }, []);
+
+      else if (currentUser.role === "employee") {
+
+        allowedKpiIds = assignments
+          .filter(
+            a => Number(a.employee_id) === Number(currentUser.id)
+          )
+          .map(
+            a => Number(a.kpi_metric_id)
+          );
+
+      }
+
+      else if (currentUser.role === "manager") {
+
+        // team members
+        const teamMemberIds = employees
+          .filter(
+            e => Number(e.managerId) === Number(currentUser.id)
+          )
+          .map(
+            e => Number(e.id)
+          );
+
+        // include manager himself
+        teamMemberIds.push(Number(currentUser.id));
+
+        allowedKpiIds = assignments
+          .filter(
+            a => teamMemberIds.includes(
+              Number(a.employee_id)
+            )
+          )
+          .map(
+            a => Number(a.kpi_metric_id)
+          );
+
+      }
+
+      const filteredKpis = allKpis.filter(
+        k => allowedKpiIds.includes(Number(k.id))
+      );
+
+      setStats(statsData);
+      setKpis(allKpis);
+      setKras(allKras);
+      setVisibleKpis(filteredKpis);
+
+      if (filteredKpis.length) {
+
+        const first = filteredKpis[0];
+
+        setTrendKpi(first);
+
+        const ms = await measurementsForKpi(first.id);
+
+        setTrend(
+          ms.map(m => ({
+            period: m.measurement_period_label,
+            value: m.measured_value
+          }))
+        );
+
+      }
+
+    }
+
+    catch (err) {
+
+      console.error(err);
+
+    }
+
+  }
+
+  load();
+
+}, []);
 
   if (!stats) return <Layout crumb={<b>Dashboard</b>}><Spinner /></Layout>;
 
-  const pct = stats.totalKpis ? Math.round((stats.measured / stats.totalKpis) * 100) : 0;
+const dashboardCounts = {
+  totalKpis: visibleKpis.length,
+  totalKras: new Set(
+    visibleKpis.map(k => Number(k.kra_area_id))
+  ).size,
+  green: 0,
+  amber: 0,
+  red: 0,
+  measured: 0
+};
+
+visibleKpis.forEach((k) => {
+
+  const m = stats.latestByKpi[k.id];
+
+  if (!m)
+    return;
+
+  dashboardCounts.measured++;
+
+  if (m.status === "green")
+    dashboardCounts.green++;
+
+  else if (m.status === "amber")
+    dashboardCounts.amber++;
+
+  else if (
+    m.status === "red" ||
+    m.status === "critical"
+  )
+    dashboardCounts.red++;
+
+});
+
+
+  const pct = dashboardCounts.totalKpis
+  ? Math.round(
+      (dashboardCounts.measured /
+        dashboardCounts.totalKpis) * 100
+    )
+  : 0;
 
   return (
     <Layout crumb={<b>Dashboard</b>}>
       <div className="page-head">
         <div>
           <h1>KPI overview</h1>
-          <p>Real-time RAG status across all {stats.totalKpis} KPIs · FY2026-27</p>
+          <p>
+  Real-time RAG status across all
+  {" "}
+  {dashboardCounts.totalKpis}
+  {" "}
+  KPIs · FY2026-27
+</p>
         </div>
       </div>
 
       <div className="stat-grid">
         <div className="stat">
           <div className="stat__label">Total KPIs</div>
-          <div className="stat__value">{stats.totalKpis}</div>
-          <div className="stat__sub">{stats.totalKras} KRA areas</div>
+          <div className="stat__value">
+  {dashboardCounts.totalKpis}
+</div>
+
+<div className="stat__sub">
+  {dashboardCounts.totalKras} KRA areas
+</div>
         </div>
         <div className="stat stat--ok">
           <div className="stat__label">Green</div>
-          <div className="stat__value">{stats.green}</div>
+          <div className="stat__value">{dashboardCounts.green}</div>
           <div className="stat__sub">on or above target</div>
         </div>
         <div className="stat stat--warn">
           <div className="stat__label">Amber</div>
-          <div className="stat__value">{stats.amber}</div>
+          <div className="stat__value">{dashboardCounts.amber}</div>
           <div className="stat__sub">in warning band</div>
         </div>
         <div className="stat stat--bad">
           <div className="stat__label">Red / Critical</div>
-          <div className="stat__value">{stats.red}</div>
+          <div className="stat__value">{dashboardCounts.red}</div>
           <div className="stat__sub">needs attention</div>
         </div>
         <div className="stat">
           <div className="stat__label">Measured this cycle</div>
           <div className="stat__value">{pct}%</div>
-          <div className="stat__sub">{stats.measured} of {stats.totalKpis} KPIs</div>
+          <div className="stat__sub">{dashboardCounts.measured}of{" "}{dashboardCounts.totalKpis} KPIs</div>
         </div>
       </div>
 
@@ -91,7 +232,9 @@ export default function Dashboard() {
           <div className="card__head"><h3>KRA health</h3></div>
           <div className="card__body" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {kras.map((kra) => {
-              const areaKpis = kpis.filter((k) => Number(k.kra_area_id) === Number(kra.id));
+              const areaKpis = visibleKpis.filter((k) => Number(k.kra_area_id) === Number(kra.id));
+              if (areaKpis.length === 0)
+  return null; 
               const counts = { green: 0, amber: 0, red: 0 };
               areaKpis.forEach((k) => {
                 const m = stats.latestByKpi[k.id];
@@ -127,7 +270,7 @@ export default function Dashboard() {
               <tr><th>KPI</th><th>KRA area</th><th>Latest</th><th>Target</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {kpis
+              {visibleKpis
                 .map((k) => ({ k, m: stats.latestByKpi[k.id] }))
                 .filter(({ m }) => m && (m.status === "red" || m.status === "amber" || m.status === "critical"))
                 .slice(0, 8)
