@@ -3,10 +3,13 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
-import {listMeasurements, listKpis , saveMeasurement, deleteMeasurement, employeeName} from "../lib/store";
+import {listMeasurements, listKpis , saveMeasurement, deleteMeasurement, employeeName, getCurrentUser , listEmployees , listAssignments} from "../lib/store";
 
 export default function Measurements() {
   const [rows, setRows] = useState(null);
+  const [allRows, setAllRows] = useState([]);
+const [employees, setEmployees] = useState([]);
+const [currentUser, setCurrentUser] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -14,8 +17,104 @@ export default function Measurements() {
   const [toast, setToast] = useState(null);
   const [q, setQ] = useState("");
 
-  const load = () => Promise.all([listMeasurements(), listKpis()])
-    .then(([m, k]) => { setRows(m.sort((a,b)=>String(b.period_start_date).localeCompare(String(a.period_start_date)))); setKpis(k); });
+  const load = async () => {
+
+  const user = await getCurrentUser();
+
+  const [
+    measurements,
+    kpis,
+    assignments,
+    employeesList
+  ] = await Promise.all([
+    listMeasurements(),
+    listKpis(),
+    listAssignments(),
+    listEmployees()
+  ]);
+
+  let visibleMeasurements = [];
+
+  // ADMIN
+  if (user.role === "admin") {
+
+    visibleMeasurements = measurements;
+
+  }
+
+  // EMPLOYEE
+  else if (user.role === "employee") {
+
+    const myKpiIds = assignments
+      .filter(
+        a =>
+          Number(a.employee_id) ===
+          Number(user.id)
+      )
+      .map(
+        a => Number(a.kpi_metric_id)
+      );
+
+    visibleMeasurements =
+      measurements.filter(
+        m =>
+          myKpiIds.includes(
+            Number(m.kpi_metric_id)
+          )
+      );
+
+  }
+
+  // MANAGER
+  else if (user.role === "manager") {
+
+    const teamIds = employeesList
+      .filter(
+        e =>
+          Number(e.managerId) ===
+          Number(user.id)
+      )
+      .map(
+        e => Number(e.id)
+      );
+
+    teamIds.push(Number(user.id));
+
+    const teamKpis = assignments
+      .filter(
+        a =>
+          teamIds.includes(
+            Number(a.employee_id)
+          )
+      )
+      .map(
+        a => Number(a.kpi_metric_id)
+      );
+
+    visibleMeasurements =
+      measurements.filter(
+        m =>
+          teamKpis.includes(
+            Number(m.kpi_metric_id)
+          )
+      );
+
+  }
+
+  visibleMeasurements.sort(
+    (a, b) =>
+      String(b.period_start_date)
+        .localeCompare(
+          String(a.period_start_date)
+        )
+  );
+
+  setCurrentUser(user);
+  setEmployees(employeesList);
+  setAllRows(measurements);
+  setRows(visibleMeasurements);
+  setKpis(kpis);
+};
   useEffect(() => { load(); }, []);
 
   const kpiName = (id) => kpis.find((k) => Number(k.id) === Number(id))?.name || "—";

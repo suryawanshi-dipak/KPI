@@ -71,32 +71,52 @@ function cleanToken(rawText) {
  * 2. Public served files: /Token.txt or /token.txt
  * 3. Browser local storage (key: 'token')
  */
+// async function getToken() {
+//   if (cachedToken) return cachedToken;
+//   try {
+//     const res = await fetch("/Token.txt");
+//     if (res.ok) {
+//       const text = await res.text();
+//       cachedToken = cleanToken(text);
+//       return cachedToken;
+//     }
+//   } catch (e) {
+//     // Ignore and proceed to try lowercase token.txt
+//   }
+//   try {
+//     const res = await fetch("/token.txt");
+//     if (res.ok) {
+//       const text = await res.text();
+//       cachedToken = cleanToken(text);
+//       return cachedToken;
+//     }
+//   } catch (e) {
+//     // Ignore and fall back to localStorage
+//   }
+//   const localVal = localStorage.getItem("token") || "";
+//   cachedToken = cleanToken(localVal);
+//   return cachedToken;
+// }
+
 async function getToken() {
-  if (cachedToken) return cachedToken;
-  try {
-    const res = await fetch("/Token.txt");
-    if (res.ok) {
-      const text = await res.text();
-      cachedToken = cleanToken(text);
-      return cachedToken;
-    }
-  } catch (e) {
-    // Ignore and proceed to try lowercase token.txt
+
+  if (cachedToken) {
+    return cachedToken;
   }
-  try {
-    const res = await fetch("/token.txt");
-    if (res.ok) {
-      const text = await res.text();
-      cachedToken = cleanToken(text);
-      return cachedToken;
-    }
-  } catch (e) {
-    // Ignore and fall back to localStorage
+
+  const token =
+    sessionStorage.getItem("kpi_token");
+
+  if (token) {
+
+    cachedToken = token;
+
+    return token;
   }
-  const localVal = localStorage.getItem("token") || "";
-  cachedToken = cleanToken(localVal);
-  return cachedToken;
+
+  return null;
 }
+
 
 
 function authHeaders(token) {
