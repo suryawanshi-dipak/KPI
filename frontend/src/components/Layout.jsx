@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { Icon } from "./Icon";
 import { getCurrentUser } from "../lib/store";
+import { logout } from "../api/auth";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: Icon.dashboard, end: true },
@@ -74,6 +75,12 @@ export default function Layout({ crumb, children }) {
             </>
           )}
         </nav>
+        
+        {/* Logout button at the bottom of the sidebar */}
+        <button className="nav-item sidebar__logout" onClick={logout} title="Sign out of your session">
+          <Icon.logout /> Logout
+        </button>
+
         <div className="sidebar__foot">
           Vitec · FY2026-27<br />Frontend preview build
         </div>

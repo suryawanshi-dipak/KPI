@@ -16,12 +16,33 @@ export default function LoginScreen({ onLogin }) {
     setError("");
     setLoading(true);
     try {
+      // Call the login API helper with user credentials
       const data = await login(email, password);
-      sessionStorage.setItem("kpi_auth_token", data.token);
-      sessionStorage.setItem("kpi_user", JSON.stringify({ email: data.email, role: data.role, name: data.name, employeeId: data.employeeId }));
-      onLogin({ email: data.email, role: data.role, name: data.name, employeeId: data.employeeId });
+      
+      // Store the JWT token and user details in sessionStorage.
+      // kpi_token is read by store.js and auth.js to authenticate all API requests.
+      sessionStorage.setItem("kpi_token", data.token);
+      sessionStorage.setItem(
+        "kpi_user",
+        JSON.stringify({
+          email: data.email,
+          role: data.role,
+          name: data.name,
+          employeeId: data.employeeId,
+        })
+      );
+      
+      // Call onLogin callback if provided by the parent component
+      onLogin?.({
+        email: data.email,
+        role: data.role,
+        name: data.name,
+        employeeId: data.employeeId,
+      });
+      
+      // Navigate to the main dashboard page upon successful authentication
       navigate("/");
-    } catch {
+    } catch (err) {
       setError("Invalid email or password.");
     } finally {
       setLoading(false);
