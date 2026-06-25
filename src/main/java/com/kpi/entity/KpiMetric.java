@@ -3,6 +3,7 @@ package com.kpi.entity;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.kpi.converter.DirectionConverter;
 import com.kpi.converter.FrequencyConverter;
 import com.kpi.entity.enums.Direction;
 import com.kpi.entity.enums.Frequency;
@@ -33,7 +34,7 @@ public class KpiMetric {
     @Column(name = "target_expression", length = 100)
     private String targetExpression;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = DirectionConverter.class)
     @Column(nullable = false)
     private Direction direction;
 
