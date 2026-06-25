@@ -23,7 +23,7 @@ db.kpi_measurement ||= [];
 
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const API_BASE = "http://localhost:8080/kpi/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE || "/kpi/api/v1";
 
 function nextId(table) {
   const ids = db[table].map((r) => Number(r.id) || 0);
@@ -356,7 +356,7 @@ export async function listKras() {
     const headers = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     
-    const res = await fetch("http://localhost:8080/kpi/api/v1/kra-areas", { headers });
+    const res = await fetch(`${API_BASE}/kra-areas`, { headers });
     if (!res.ok) throw new Error("Failed to fetch KRA Areas");
     
     const json = await res.json();
@@ -382,7 +382,7 @@ export async function getKra(id) {
     const headers = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     
-    const res = await fetch(`http://localhost:8080/kpi/api/v1/kra-areas/${id}`, { headers });
+    const res = await fetch(`${API_BASE}/kra-areas/${id}`, { headers });
     if (!res.ok) throw new Error(`Failed to fetch KRA Area ${id}`);
     
     const json = await res.json();
@@ -418,8 +418,8 @@ export async function saveKra(payload) {
     
     const isEdit = !!payload.id;
     const url = isEdit
-      ? `http://localhost:8080/kpi/api/v1/kra-areas/${payload.id}`
-      : "http://localhost:8080/kpi/api/v1/kra-areas";
+      ? `${API_BASE}/kra-areas/${payload.id}`
+      : `${API_BASE}/kra-areas`;
     const method = isEdit ? "PUT" : "POST";
     
     const res = await fetch(url, {
@@ -460,7 +460,7 @@ export async function deleteKra(id) {
     const headers = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
     
-    const res = await fetch(`http://localhost:8080/kpi/api/v1/kra-areas/${id}`, {
+    const res = await fetch(`${API_BASE}/kra-areas/${id}`, {
       method: "DELETE",
       headers,
     });
@@ -493,7 +493,7 @@ export async function listKpis() {
     }
 
     const res = await fetch(
-      "http://localhost:8080/kpi/api/v1/kpi-metrics",
+      `${API_BASE}/kpi-metrics`,
       { headers }
     );
 
@@ -528,7 +528,7 @@ export async function getKpi(id) {
     }
 
     const res = await fetch(
-      `http://localhost:8080/kpi/api/v1/kpi-metrics/${id}`,
+      `${API_BASE}/kpi-metrics/${id}`,
       { headers }
     );
 
@@ -583,8 +583,8 @@ export async function saveKpi(payload) {
     const isEdit = !!payload.id;
 
     const url = isEdit
-      ? `http://localhost:8080/kpi/api/v1/kpi-metrics/${payload.id}`
-      : "http://localhost:8080/kpi/api/v1/kpi-metrics";
+      ? `${API_BASE}/kpi-metrics/${payload.id}`
+      : `${API_BASE}/kpi-metrics`;
 
     const method = isEdit ? "PUT" : "POST";
 
@@ -641,7 +641,7 @@ export async function deleteKpi(id) {
     }
 
     const res = await fetch(
-      `http://localhost:8080/kpi/api/v1/kpi-metrics/${id}`,
+      `${API_BASE}/kpi-metrics/${id}`,
       {
         method: "DELETE",
         headers,
@@ -1046,7 +1046,7 @@ export async function listMeasurements() {
     }
 
     const res = await fetch(
-      "http://localhost:8080/kpi/api/v1/kpi-measurements",
+      `${API_BASE}/kpi-measurements`,
       { headers }
     );
 
@@ -1084,7 +1084,7 @@ export async function measurementsForKpi(kpiId) {
     }
 
     const res = await fetch(
-      `http://localhost:8080/kpi/api/v1/kpi-measurements?metricId=${kpiId}`,
+      `${API_BASE}/kpi-measurements?metricId=${kpiId}`,
       { headers }
     );
 
@@ -1135,8 +1135,8 @@ export async function saveMeasurement(payload) {
     const isEdit = !!payload.id;
 
     const url = isEdit
-      ? `http://localhost:8080/kpi/api/v1/kpi-measurements/${payload.id}`
-      : "http://localhost:8080/kpi/api/v1/kpi-measurements";
+      ? `${API_BASE}/kpi-measurements/${payload.id}`
+      : `${API_BASE}/kpi-measurements`;
 
     const method = isEdit ? "PUT" : "POST";
 
@@ -1198,7 +1198,7 @@ export async function getMeasurement(id) {
     }
 
     const res = await fetch(
-      `http://localhost:8080/kpi/api/v1/kpi-measurements/${id}`,
+      `${API_BASE}/kpi-measurements/${id}`,
       { headers }
     );
 
@@ -1232,7 +1232,7 @@ export async function deleteMeasurement(id) {
     }
 
     const res = await fetch(
-      `http://localhost:8080/kpi/api/v1/kpi-measurements/${id}`,
+      `${API_BASE}/kpi-measurements/${id}`,
       {
         method: "DELETE",
         headers

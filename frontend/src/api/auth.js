@@ -1,5 +1,5 @@
 // api/auth.js
-const BASE_URL ="http://localhost:8080/kpi";
+const BASE_URL = import.meta.env.VITE_BASE_URL || "/kpi";
 
 export async function login(email, password) {
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
@@ -18,7 +18,7 @@ export function logout() {
   sessionStorage.removeItem("kpi_token");
   sessionStorage.removeItem("kpi_user");
 
-  window.location.href = "/login";
+  window.location.href = "/kpi/login";
 }
 
 export function isAuthenticated() {

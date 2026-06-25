@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Kpis from "./pages/Kpis";
 import KpiDetail from "./pages/KpiDetail";
@@ -23,8 +23,8 @@ export default function App() {
         <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
         <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-        <Route path="/login" element={<LoginScreen />}
-/>
+        <Route path="/login" element={<LoginScreen />} />
+        <Route path="/index.html" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
