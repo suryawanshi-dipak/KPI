@@ -12,7 +12,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/kpi">
       <Routes>
        <Route path="/" element={<ProtectedRoute> <Dashboard /></ProtectedRoute> }
 />
