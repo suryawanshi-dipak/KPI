@@ -3,7 +3,7 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KraForm from "../forms/KraForm";
-import { listKras, listKpis, saveKra, getStats } from "../lib/store";
+import { listKras, listKpis, saveKra, getStats, deleteKra, getCurrentUser } from "../lib/store";
 
 export default function Kras() {
   const [kras, setKras] = useState(null);
@@ -12,21 +12,38 @@ export default function Kras() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  const load = () => Promise.all([listKras(), listKpis(), getStats()])
-    .then(([r, k, s]) => { setKras(r); setKpis(k); setStats(s); });
+  const load = () => Promise.all([listKras(), listKpis(), getStats(), getCurrentUser()])
+    .then(([r, k, s, user]) => { setKras(r); setKpis(k); setStats(s); setCurrentUser(user); });
   useEffect(() => { load(); }, []);
 
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
   async function handleSave(p){ setSaving(true); await saveKra(p); setSaving(false); setEditing(null); await load(); flash(p.id?"KRA updated":"KRA created"); }
+  
+  async function handleDelete(id, name) {
+    if (window.confirm(`Are you sure you want to delete the KRA area "${name}"?`)) {
+      try {
+        await deleteKra(id);
+        await load();
+        flash("KRA deleted");
+      } catch (err) {
+        alert(err.message || "Failed to delete KRA Area");
+      }
+    }
+  }
 
-  if (!kras || !stats) return <Layout crumb={<b>KRA Areas</b>}><Spinner /></Layout>;
+  if (!kras || !stats || !currentUser) return <Layout crumb={<b>KRA Areas</b>}><Spinner /></Layout>;
+
+  const isEmployee = currentUser.role === "employee";
 
   return (
     <Layout crumb={<><span>Configuration</span> · <b>KRA Areas</b></>}>
       <div className="page-head">
         <div><h1>KRA areas</h1><p>Key Result Areas group related KPIs for review and reporting.</p></div>
-        <button className="btn btn--primary" onClick={() => setEditing({})}><Icon.plus /> New KRA area</button>
+        {!isEmployee && (
+          <button className="btn btn--primary" onClick={() => setEditing({})}><Icon.plus /> New KRA area</button>
+        )}
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:"1rem" }}>
@@ -46,7 +63,12 @@ export default function Kras() {
                   <h3>{kra.area_name}</h3>
                   <div className="cell-sub" style={{marginTop:2}}>{kra.financial_year}</div>
                 </div>
-                <button className="icon-btn" title="Edit" onClick={() => setEditing(kra)}><Icon.edit /></button>
+                {!isEmployee && (
+                  <div style={{ display: "flex", gap: "0.25rem" }}>
+                    <button className="icon-btn" title="Edit" onClick={() => setEditing(kra)}><Icon.edit /></button>
+                    <button className="icon-btn icon-btn--danger" title="Delete" onClick={() => handleDelete(kra.id, kra.area_name)} style={{ color: "var(--bad)" }}><Icon.trash /></button>
+                  </div>
+                )}
               </div>
               <div className="card__body">
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"0.5rem" }}>
@@ -73,7 +95,7 @@ export default function Kras() {
         })}
       </div>
 
-      {editing && (
+      {!isEmployee && editing && (
         <Modal title={editing.id ? "Edit KRA area" : "New KRA area"}
           subtitle={editing.id ? editing.area_name : "Group related KPIs under a Key Result Area"}
           onClose={() => setEditing(null)}>

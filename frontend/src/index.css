@@ -38,6 +38,15 @@ h1,h2,h3,h4{font-weight:600;letter-spacing:-.01em;line-height:1.2}
 .nav-item svg{width:17px;height:17px;flex-shrink:0;opacity:.85}
 .nav-section{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:#5f6b86;padding:.9rem .85rem .4rem;font-weight:600}
 .sidebar__foot{padding:.85rem 1.1rem;border-top:1px solid rgba(255,255,255,.07);font-size:.72rem;color:#5f6b86}
+.sidebar__logout {
+  background: none;
+  border: none;
+  width: calc(100% - 2.2rem);
+  margin: 0 1.1rem 0.75rem;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
 
 .main{display:flex;flex-direction:column;min-width:0}
 .topbar{height:58px;background:var(--surface);border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:20}

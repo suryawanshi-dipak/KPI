@@ -15,4 +15,6 @@ public class EmployeeResponse {
     private String email;
     private String designation;
     private String department;
+    private String role;
+    private Integer managerId;
 }

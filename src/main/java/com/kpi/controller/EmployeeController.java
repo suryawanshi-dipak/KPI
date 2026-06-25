@@ -25,4 +25,12 @@ public class EmployeeController {
     public ResponseEntity<ApiResponse<EmployeeResponse>> getById(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.success(employeeService.getById(id)));
     }
+
+    @GetMapping("/manager/{managerId}")
+public ResponseEntity<ApiResponse<List<EmployeeResponse>>> getEmployeesByManager( @PathVariable Integer managerId) {
+
+    List<EmployeeResponse> employees = employeeService.getEmployeesByManager(managerId);
+
+    return ResponseEntity.ok(ApiResponse.success(employees) );
+}
 }

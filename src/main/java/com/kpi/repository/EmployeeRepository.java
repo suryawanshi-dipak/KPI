@@ -1,5 +1,6 @@
 package com.kpi.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,5 +11,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Integer>{
  
     Optional<Employee> findByEmail(String email);
 
-    Optional<Employee> findByEmployeeId(String employeeId);    
+    Optional<Employee> findByEmployeeId(String employeeId); 
+    
+    List<Employee> findByManager_Id(Integer managerId);
 }

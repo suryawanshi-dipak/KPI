@@ -9,4 +9,6 @@ public interface EmployeeService {
     List<EmployeeResponse> getAll();
 
     EmployeeResponse getById(Integer id);
+
+ List<EmployeeResponse> getEmployeesByManager(Integer managerId);
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Field, StatusPill } from "../components/UI";
-import { ENUMS, listKpis, listEmployees, kraName } from "../lib/store";
+import { ENUMS, listKpis, listEmployees, kraName, getCurrentUser, listAssignments } from "../lib/store";
 import { computeStatus } from "../lib/status";
 
 const BLANK = {
@@ -23,15 +23,39 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   const [errors, setErrors] = useState({});
   const [kpis, setKpis] = useState([]);
   const [people, setPeople] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [assignments, setAssignments] = useState([]);
 
   useEffect(() => {
     listKpis().then(setKpis);
     listEmployees().then(setPeople);
+    getCurrentUser().then(setCurrentUser);
+    listAssignments().then(setAssignments);
   }, []);
 
+  // Default the "Recorded by" (measured_by) selector to the logged-in user once loaded.
+  useEffect(() => {
+    if (currentUser && !form.measured_by) {
+      setForm((f) => ({ ...f, measured_by: currentUser.id }));
+    }
+  }, [currentUser]);
+
+  // Filter KPIs list: if the user is an employee, only show KPIs assigned to them.
+  const filteredKpis = useMemo(() => {
+    if (!currentUser || currentUser.role !== "employee") {
+      return kpis;
+    }
+    const myKpiIds = new Set(
+      assignments
+        .filter((a) => Number(a.employee_id) === Number(currentUser.id))
+        .map((a) => Number(a.kpi_metric_id))
+    );
+    return kpis.filter((k) => myKpiIds.has(Number(k.id)));
+  }, [kpis, currentUser, assignments]);
+
   const kpi = useMemo(
-    () => kpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
-    [kpis, form.kpi_metric_id]
+    () => filteredKpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
+    [filteredKpis, form.kpi_metric_id]
   );
 
   // Live status preview (frontend mirror of backend rule)
@@ -99,7 +123,7 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
           <select className={`select ${errors.kpi_metric_id ? "invalid" : ""}`}
             value={form.kpi_metric_id} onChange={set("kpi_metric_id")} disabled={!!lockedKpiId}>
             <option value="">Select the KPI to measure…</option>
-            {kpis.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+            {filteredKpis.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
           </select>
         </Field>
       </div>
@@ -176,7 +200,8 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
 
         <Field label="Recorded by" required error={errors.measured_by}>
           <select className={`select ${errors.measured_by ? "invalid" : ""}`}
-            value={form.measured_by} onChange={set("measured_by")}>
+            value={form.measured_by} onChange={set("measured_by")}
+            disabled={currentUser?.role === "employee"}>
             <option value="">Select person…</option>
             {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
