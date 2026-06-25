@@ -108,7 +108,7 @@
     </dependencies>
 
     <build>
-		<finalName>kpi-management</finalName>
+		<finalName>Kpi_monitor</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
