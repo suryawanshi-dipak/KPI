@@ -1,5 +1,6 @@
 package com.kpi.entity;
 
+import com.kpi.converter.FrequencyConverter;
 import com.kpi.entity.enums.Frequency;
 import com.kpi.entity.enums.MeasurementStatus;
 
@@ -34,7 +35,7 @@ public class KpiMeasurement {
     @Column(name = "measured_value", precision = 12, scale = 4)
     private BigDecimal measuredValue;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = FrequencyConverter.class)
     @Column(name = "measurement_period_type", nullable = false)
     private Frequency measurementPeriodType;
 
