@@ -16,6 +16,6 @@ public class FrequencyConverter implements AttributeConverter<Frequency, String>
     @Override
     public Frequency convertToEntityAttribute(String dbValue) {
         if (dbValue == null) return null;
-        return Frequency.valueOf(dbValue.replace('-', '_'));
+        return Frequency.valueOf(dbValue.replace('-', '_').replace(' ', '_'));
     }
 }
