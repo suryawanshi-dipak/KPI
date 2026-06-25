@@ -1,0 +1,60 @@
+name: Build & Deploy JAR
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # ─── Frontend Build ───────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Build React App
+        run: npm run build
+        working-directory: ./frontend
+
+      # Zip the frontend build output
+      - name: Zip Frontend Build
+        run: zip -r frontend-build.zip ./frontend/build
+
+      # ─── Backend Build ────────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build JAR
+        run: mvn clean package -DskipTests
+
+      # ─── Release ─────────────────────────────────────────────────
+      - name: Delete old release if exists
+        run: gh release delete latest --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old tag if exists
+        run: git push origin --delete latest || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release & Upload JAR and Frontend
+        run: |
+          gh release create latest \
+            ./target/Kpi_monitor.jar \
+            ./frontend-build.zip \
+            --title "Latest Build" \
+            --notes "Auto-deploy from commit ${{ github.sha }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
