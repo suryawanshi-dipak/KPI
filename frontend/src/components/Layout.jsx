@@ -82,7 +82,7 @@ export default function Layout({ crumb, children }) {
         </button>
 
         <div className="sidebar__foot">
-          Vitec · FY2026-27<br />Frontend preview build
+          Vitec · FY2026-27<br />
         </div>
       </aside>
 
