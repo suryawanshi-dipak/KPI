@@ -49,6 +49,22 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
                 .map(this::toResponse).toList();
     }
 
+    private Integer getCurrentUserEmployeeId() {
+        try {
+            org.springframework.security.core.Authentication auth = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                String email = auth.getName();
+                return employeeRepository.findByEmail(email)
+                        .map(com.kpi.entity.Employee::getId)
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public KpiAssignmentResponse create(KpiAssignmentRequest request) {
@@ -64,6 +80,8 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
                 .isPrimary(request.getIsPrimary() != null ? request.getIsPrimary() : false)
                 .assignedFrom(request.getAssignedFrom())
                 .assignedTo(request.getAssignedTo())
+                .createdBy(getCurrentUserEmployeeId())
+                .updatedBy(getCurrentUserEmployeeId())
                 .build();
 
         return toResponse(assignmentRepository.save(assignment));
@@ -85,6 +103,7 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
         if (request.getIsPrimary() != null) assignment.setIsPrimary(request.getIsPrimary());
         assignment.setAssignedFrom(request.getAssignedFrom());
         assignment.setAssignedTo(request.getAssignedTo());
+        assignment.setUpdatedBy(getCurrentUserEmployeeId());
 
         return toResponse(assignmentRepository.save(assignment));
     }

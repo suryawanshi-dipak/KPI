@@ -40,18 +40,42 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     }
   }, [currentUser]);
 
-  // Filter KPIs list: if the user is an employee, only show KPIs assigned to them.
+  // Filter KPIs list: if the user is an employee/manager, only show KPIs assigned to them/their team.
   const filteredKpis = useMemo(() => {
-    if (!currentUser || currentUser.role !== "employee") {
-      return kpis;
+    if (!currentUser) return [];
+    if (currentUser.role === "employee") {
+      const myKpiIds = new Set(
+        assignments
+          .filter((a) => Number(a.employee_id) === Number(currentUser.id))
+          .map((a) => Number(a.kpi_metric_id))
+      );
+      return kpis.filter((k) => myKpiIds.has(Number(k.id)));
     }
-    const myKpiIds = new Set(
-      assignments
-        .filter((a) => Number(a.employee_id) === Number(currentUser.id))
-        .map((a) => Number(a.kpi_metric_id))
-    );
-    return kpis.filter((k) => myKpiIds.has(Number(k.id)));
-  }, [kpis, currentUser, assignments]);
+    if (currentUser.role === "manager") {
+      const myTeamEmployeeIds = new Set(
+        people
+          .filter((p) => Number(p.managerId) === Number(currentUser.id) || Number(p.id) === Number(currentUser.id))
+          .map((p) => Number(p.id))
+      );
+      const myTeamKpiIds = new Set(
+        assignments
+          .filter((a) => myTeamEmployeeIds.has(Number(a.employee_id)))
+          .map((a) => Number(a.kpi_metric_id))
+      );
+      return kpis.filter((k) => myTeamKpiIds.has(Number(k.id)));
+    }
+    return kpis;
+  }, [kpis, currentUser, assignments, people]);
+
+  const filteredPeople = useMemo(() => {
+    if (!currentUser) return people;
+    if (currentUser.role === "manager") {
+      return people.filter(
+        (p) => Number(p.id) === Number(currentUser.id) || Number(p.managerId) === Number(currentUser.id)
+      );
+    }
+    return people;
+  }, [people, currentUser]);
 
   const kpi = useMemo(
     () => filteredKpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
@@ -84,6 +108,14 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     }
   }, [kpi]); // eslint-disable-line
 
+  const isPersonDisabledForKpi = (personId) => {
+    if (!currentUser || currentUser.role !== "manager") return false;
+    if (!form.kpi_metric_id) return true; // disable if no KPI selected
+    return !assignments.some(
+      (a) => Number(a.employee_id) === Number(personId) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
+    );
+  };
+
   function validate() {
     const e = {};
     if (!form.kpi_metric_id) e.kpi_metric_id = "Choose the KPI you're measuring.";
@@ -98,7 +130,18 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (!form.period_end_date) e.period_end_date = "Pick the period end date.";
     if (form.period_start_date && form.period_end_date && form.period_end_date < form.period_start_date)
       e.period_end_date = "End date can't be before start date.";
-    if (!form.measured_by) e.measured_by = "Select who recorded this.";
+    
+    if (!form.measured_by) {
+      e.measured_by = "Select who recorded this.";
+    } else if (currentUser?.role === "manager") {
+      const isAssigned = assignments.some(
+        (a) => Number(a.employee_id) === Number(form.measured_by) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
+      );
+      if (!isAssigned) {
+        e.measured_by = "The selected person is not assigned to this KPI.";
+      }
+    }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -203,7 +246,17 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
             value={form.measured_by} onChange={set("measured_by")}
             disabled={currentUser?.role === "employee"}>
             <option value="">Select person…</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {filteredPeople.map((p) => {
+              // Determine if this team member is unassigned to the current KPI being measured.
+              // If they are not assigned, we disable their option to prevent managers from recording
+              // measurements on their behalf, while keeping them visible in the list.
+              const isDisabled = isPersonDisabledForKpi(p.id);
+              return (
+                <option key={p.id} value={p.id} disabled={isDisabled}>
+                  {p.name}
+                </option>
+              );
+            })}
           </select>
         </Field>
 

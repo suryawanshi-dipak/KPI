@@ -255,6 +255,17 @@ export default function Kpis() {
             <tbody>
               {filtered.map((k) => {
                 const m = stats.latestByKpi[k.id];
+                const myTeamEmployeeIds = new Set(
+                  employees
+                    .filter((e) => Number(e.managerId) === Number(currentUser.id) || Number(e.id) === Number(currentUser.id))
+                    .map((e) => Number(e.id))
+                );
+                const isKpiAccessible = !isManager || (
+                  Number(k.created_by) === Number(currentUser.id) ||
+                  assignments.some(
+                    (a) => Number(a.kpi_metric_id) === Number(k.id) && myTeamEmployeeIds.has(Number(a.employee_id))
+                  )
+                );
                 return (
                   <tr key={k.id}>
                     <td>
@@ -266,9 +277,13 @@ export default function Kpis() {
                     {/* View/Edit assignments only visible to managers and admins */}
                     {!isEmployee && (
                       <td>
-                        <button className="btn btn--ghost" onClick={() => openAssignments(k)}>
-                          View Employees
-                        </button>
+                        {isKpiAccessible ? (
+                          <button className="btn btn--ghost" onClick={() => openAssignments(k)}>
+                            View Employees
+                          </button>
+                        ) : (
+                          <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
+                        )}
                       </td>
                     )}
                     
@@ -280,30 +295,34 @@ export default function Kpis() {
                     <td className="cell-sub">{cap(k.frequency)}</td>
                     <td><StatusPill status={m?.status || "unknown"} /></td>
                     <td>
-                      <div className="cell-actions">
-                        {/* Ruler / Add Measurement - visible to everyone */}
-                        <button className="icon-btn" title="Enter measurement" onClick={() => setMeasuring(k)}>
-                          <Icon.measure />
-                        </button>
-                        {/* Eye / View Trend - visible to everyone */}
-                        <button className="icon-btn" title="View trend" onClick={() => nav(`/kpis/${k.id}`)}>
-                          <Icon.eye />
-                        </button>
-                        {/* Administrative controls: only visible to managers and admins */}
-                        {(isAdmin || isManager) && (
-                          <>
-                            <button className="icon-btn" title="Edit" onClick={() => setEditing(k)}>
-                              <Icon.edit />
-                            </button>
-                            <button className="icon-btn" title="Assign employees" onClick={() => setAssigning(k)}>
-                              <Icon.plus />
-                            </button>
-                            <button className="icon-btn" title="Delete KPI" onClick={() => handleDelete(k.id)} style={{ color: "var(--bad)" }}>
-                              <Icon.trash />                                  
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      {isKpiAccessible ? (
+                        <div className="cell-actions">
+                          {/* Ruler / Add Measurement - visible to everyone */}
+                          <button className="icon-btn" title="Enter measurement" onClick={() => setMeasuring(k)}>
+                            <Icon.measure />
+                          </button>
+                          {/* Eye / View Trend - visible to everyone */}
+                          <button className="icon-btn" title="View trend" onClick={() => nav(`/kpis/${k.id}`)}>
+                            <Icon.eye />
+                          </button>
+                          {/* Administrative controls: only visible to managers and admins */}
+                          {(isAdmin || isManager) && (
+                            <>
+                              <button className="icon-btn" title="Edit" onClick={() => setEditing(k)}>
+                                <Icon.edit />
+                              </button>
+                              <button className="icon-btn" title="Assign employees" onClick={() => setAssigning(k)}>
+                                <Icon.plus />
+                              </button>
+                              <button className="icon-btn" title="Delete KPI" onClick={() => handleDelete(k.id)} style={{ color: "var(--bad)" }}>
+                                <Icon.trash />                                  
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -374,19 +393,31 @@ export default function Kpis() {
 </tr>
 
       </thead>
-      <tbody>{assignmentRows.map(a => (
-<tr key={a.id}>
-
-  <td>{a.employee_name}</td>
-  <td>{a.team || "—"}</td>
-  <td>{a.is_primary ? "Yes" : "No"}</td>
-  <td>{a.assigned_from}</td>
-  <td>{a.assigned_to || "—"}</td>
-  <td><div className="cell-actions">
-    <button className="icon-btn" title="Edit assignment" onClick={() => setEditingAssignment(a)}><Icon.edit /></button>
-    <button className="icon-btn"  title="Delete assignment" onClick={() => handleDeleteAssignment(a.id)}><Icon.trash /></button>
-    </div></td></tr>
-))}
+      <tbody>{assignmentRows.map(a => {
+        const targetEmployee = employees.find(e => Number(e.id) === Number(a.employee_id));
+        const isSelfOrTeamMember = Number(a.employee_id) === Number(currentUser.id) || 
+          (targetEmployee && Number(targetEmployee.managerId) === Number(currentUser.id));
+        const canEditOrDeleteAssignment = isAdmin || isSelfOrTeamMember;
+        return (
+          <tr key={a.id}>
+            <td>{a.employee_name}</td>
+            <td>{a.team || "—"}</td>
+            <td>{a.is_primary ? "Yes" : "No"}</td>
+            <td>{a.assigned_from}</td>
+            <td>{a.assigned_to || "—"}</td>
+            <td>
+              {canEditOrDeleteAssignment ? (
+                <div className="cell-actions">
+                  <button className="icon-btn" title="Edit assignment" onClick={() => setEditingAssignment(a)}><Icon.edit /></button>
+                  <button className="icon-btn"  title="Delete assignment" onClick={() => handleDeleteAssignment(a.id)}><Icon.trash /></button>
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
+              )}
+            </td>
+          </tr>
+        );
+      })}
       </tbody>
     </table>
   </Modal>

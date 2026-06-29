@@ -160,7 +160,8 @@ export async function getCurrentUser() {
     
     // Load employees list and find the matching record by email
     const employees = await listEmployees();
-    const current = employees.find((e) => e.email === email);
+    // Use case-insensitive comparison to avoid matching issues with emails
+    const current = employees.find((e) => e.email?.toLowerCase() === email?.toLowerCase());
     if (current) {
       cachedCurrentUser = current;
     }
@@ -210,7 +211,9 @@ function mapKpiToFrontend(b) {
     version: b.version,
     created_at: b.createdAt,
     updated_at: b.updatedAt,
-    is_deleted: b.isDeleted ? 1 : 0
+    is_deleted: b.isDeleted ? 1 : 0,
+    created_by: b.createdBy,
+    updated_by: b.updatedBy
   };
 }
 
@@ -690,22 +693,29 @@ export async function listEmployees() {
     
     const json = await res.json();
     const list = (json.data || []).map((b) => ({
-  id: b.id,
-  name: b.name,
-  email: b.email,
-  designation: b.designation,
-  department: b.department,
-  role: b.role,
-  managerId: b.managerId,
-  status: "active",
-  is_deleted: false,
-}));
+      id: b.id,
+      name: b.name,
+      email: b.email,
+      designation: b.designation,
+      department: b.department,
+      role: b.role,
+      // Normalize manager references to support both backend camelCase (managerId) and local seed snake_case (manager_id)
+      managerId: b.managerId !== undefined && b.managerId !== null ? b.managerId : b.manager_id,
+      manager_id: b.managerId !== undefined && b.managerId !== null ? b.managerId : b.manager_id,
+      status: "active",
+      is_deleted: false,
+    }));
     console.log(list);
     db.employees = list;
     return list;
   } catch (err) {
     console.error("listEmployees error:", err);
-    return clone(db.employees.filter((e) => !e.is_deleted));
+    // In fallback mode, normalize the seed data's manager reference fields as well
+    return clone(db.employees.filter((e) => !e.is_deleted)).map((e) => ({
+      ...e,
+      managerId: e.managerId !== undefined && e.managerId !== null ? e.managerId : e.manager_id,
+      manager_id: e.managerId !== undefined && e.managerId !== null ? e.managerId : e.manager_id,
+    }));
   }
 }
 

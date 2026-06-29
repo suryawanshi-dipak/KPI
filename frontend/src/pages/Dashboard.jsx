@@ -85,20 +85,18 @@ export default function Dashboard() {
       setVisibleKpis(filteredKpis);
 
       if (filteredKpis.length) {
-
         const first = filteredKpis[0];
-
         setTrendKpi(first);
-
         const ms = await measurementsForKpi(first.id);
-
+        const activeMs = ms.filter(m => !ms.some(other => Number(other.corrected_from_id) === Number(m.id)));
         setTrend(
-          ms.map(m => ({
-            period: m.measurement_period_label,
-            value: m.measured_value
-          }))
+          activeMs
+            .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
+            .map(m => ({
+              period: m.measurement_period_label,
+              value: Number(m.measured_value)
+            }))
         );
-
       }
 
     }

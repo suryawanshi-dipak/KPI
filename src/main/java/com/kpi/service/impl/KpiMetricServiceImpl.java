@@ -14,6 +14,8 @@ import com.kpi.repository.KpiMetricRepository;
 import com.kpi.repository.KraAreaRepository;
 import com.kpi.service.KpiMetricService;
 
+import com.kpi.repository.EmployeeRepository;
+
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -23,6 +25,23 @@ public class KpiMetricServiceImpl implements KpiMetricService {
 
     private final KpiMetricRepository kpiMetricRepository;
     private final KraAreaRepository kraAreaRepository;
+    private final EmployeeRepository employeeRepository;
+
+    private Integer getCurrentUserEmployeeId() {
+        try {
+            org.springframework.security.core.Authentication auth = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                String email = auth.getName();
+                return employeeRepository.findByEmail(email)
+                        .map(com.kpi.entity.Employee::getId)
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
+    }
 
     @Override
     public List<KpiMetricResponse> getAll(boolean activeOnly) {
@@ -62,6 +81,8 @@ public class KpiMetricServiceImpl implements KpiMetricService {
                 .sourceReference(request.getSourceReference())
                 .measurementInstruction(request.getMeasurementInstruction())
                 .isActive(request.getIsActive())
+                .createdBy(getCurrentUserEmployeeId())
+                .updatedBy(getCurrentUserEmployeeId())
                 .build();
 
         metric = kpiMetricRepository.save(metric);
@@ -92,6 +113,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
         metric.setSourceReference(request.getSourceReference());
         metric.setMeasurementInstruction(request.getMeasurementInstruction());
         metric.setIsActive(request.getIsActive());
+        metric.setUpdatedBy(getCurrentUserEmployeeId());
 
         metric = kpiMetricRepository.save(metric);
 
@@ -131,6 +153,8 @@ public class KpiMetricServiceImpl implements KpiMetricService {
                 .version(metric.getVersion())
                 .createdAt(metric.getCreatedAt())
                 .updatedAt(metric.getUpdatedAt())
+                .createdBy(metric.getCreatedBy())
+                .updatedBy(metric.getUpdatedBy())
                 .build();
     }
 }

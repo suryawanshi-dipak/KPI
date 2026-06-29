@@ -23,8 +23,19 @@ export default function KpiDetail() {
 
   if (!kpi) return <Layout crumb={<b>KPI</b>}><Spinner /></Layout>;
 
-  const chartData = ms.filter(m=>!m.is_pending).map((m) => ({ period: m.measurement_period_label, value: m.measured_value }));
-  const latest = ms[ms.length-1];
+  const activeMs = ms.filter(m => {
+    // A measurement is superseded if there is another measurement in ms whose corrected_from_id matches its id
+    return !ms.some(other => Number(other.corrected_from_id) === Number(m.id));
+  });
+
+  const chartData = activeMs
+    .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
+    .map((m) => ({
+      period: m.measurement_period_label,
+      value: Number(m.measured_value)
+    }));
+
+  const latest = activeMs[activeMs.length - 1];
 
   return (
     <Layout crumb={<><span onClick={()=>nav("/kpis")} style={{cursor:"pointer"}}>KPIs</span> · <b>{kpi.name}</b></>}>
@@ -40,7 +51,7 @@ export default function KpiDetail() {
         <div className="stat"><div className="stat__label">Latest value</div><div className="stat__value mono">{latest?.measured_value ?? "—"}</div><div className="stat__sub">{latest?.measurement_period_label || "no data"}</div></div>
         <div className="stat"><div className="stat__label">Latest status</div><div style={{marginTop:"0.5rem"}}><StatusPill status={latest?.status||"unknown"} /></div></div>
         <div className="stat"><div className="stat__label">Target</div><div className="stat__value mono">{kpi.target_value}</div><div className="stat__sub">{kpi.unit}</div></div>
-        <div className="stat"><div className="stat__label">Records</div><div className="stat__value">{ms.length}</div><div className="stat__sub">measurements</div></div>
+        <div className="stat"><div className="stat__label">Records</div><div className="stat__value">{activeMs.length}</div><div className="stat__sub">measurements</div></div>
       </div>
 
       <div className="card" style={{ marginBottom:"1.1rem" }}>

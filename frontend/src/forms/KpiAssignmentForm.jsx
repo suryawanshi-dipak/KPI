@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Field } from "../components/UI";
-import { listEmployees } from "../lib/store";
+import { listEmployees, getCurrentUser } from "../lib/store";
 
 const BLANK = {
   employee_id: "",
@@ -23,9 +23,11 @@ export default function KpiAssignmentForm({
   });
 
   const [employees, setEmployees] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     listEmployees().then(setEmployees);
+    getCurrentUser().then(setCurrentUser);
   }, []);
 
   const set = (k) => (e) => {
@@ -68,11 +70,20 @@ function submit(ev) {
               Select employee…
             </option>
 
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
+            {currentUser && employees
+              .filter((e) => {
+                // If the logged-in user is a manager, restrict the visible options to their direct reports (team members)
+                if (currentUser.role === "manager") {
+                  return Number(e.managerId) === Number(currentUser.id);
+                }
+                // Administrators, HR, and other roles see all employees in the system
+                return true;
+              })
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
           </select>
         </Field>
 

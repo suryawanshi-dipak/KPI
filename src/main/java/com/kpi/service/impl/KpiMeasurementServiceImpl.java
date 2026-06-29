@@ -57,6 +57,22 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .map(this::toResponse).toList();
     }
 
+    private Integer getCurrentUserEmployeeId() {
+        try {
+            org.springframework.security.core.Authentication auth = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                String email = auth.getName();
+                return employeeRepository.findByEmail(email)
+                        .map(com.kpi.entity.Employee::getId)
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public KpiMeasurementResponse create(KpiMeasurementRequest request) {
@@ -81,7 +97,9 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .measuredBy(measuredBy)
                 .isSystemGenerated(request.getIsSystemGenerated() != null ? request.getIsSystemGenerated() : false)
                 .isPending(request.getIsPending() != null ? request.getIsPending() : false)
-                .pendingReason(request.getPendingReason());
+                .pendingReason(request.getPendingReason())
+                .createdBy(getCurrentUserEmployeeId())
+                .updatedBy(getCurrentUserEmployeeId());
 
         // Link correction chain: new record points to the original it supersedes
         if (request.getCorrectedFromId() != null) {
@@ -118,6 +136,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
         if (request.getIsSystemGenerated() != null) measurement.setIsSystemGenerated(request.getIsSystemGenerated());
         if (request.getIsPending() != null) measurement.setIsPending(request.getIsPending());
         measurement.setPendingReason(request.getPendingReason());
+        measurement.setUpdatedBy(getCurrentUserEmployeeId());
 
         // Explicitly clear correction chain when correctedFromId is removed from the request
         if (request.getCorrectedFromId() != null) {
