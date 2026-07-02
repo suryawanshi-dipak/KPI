@@ -11,6 +11,8 @@ import com.kpi.entity.KpiMetric;
 import com.kpi.entity.KraArea;
 import com.kpi.exception.ResourceNotFoundException;
 import com.kpi.repository.KpiMetricRepository;
+import com.kpi.repository.KpiMeasurementRepository;
+import com.kpi.repository.KpiEmployeeAssignmentRepository;
 import com.kpi.repository.KraAreaRepository;
 import com.kpi.service.KpiMetricService;
 
@@ -24,13 +26,15 @@ import lombok.RequiredArgsConstructor;
 public class KpiMetricServiceImpl implements KpiMetricService {
 
     private final KpiMetricRepository kpiMetricRepository;
+    private final KpiMeasurementRepository kpiMeasurementRepository;
+    private final KpiEmployeeAssignmentRepository kpiEmployeeAssignmentRepository;
     private final KraAreaRepository kraAreaRepository;
     private final EmployeeRepository employeeRepository;
 
     private Integer getCurrentUserEmployeeId() {
         try {
-            org.springframework.security.core.Authentication auth = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated()) {
                 String email = auth.getName();
                 return employeeRepository.findByEmail(email)
@@ -127,6 +131,9 @@ public class KpiMetricServiceImpl implements KpiMetricService {
         KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new ResourceNotFoundException("KPI Metric not found"));
 
+        // Soft delete child entities before marking the metric itself deleted.
+        kpiMeasurementRepository.softDeleteByMetricId(id);
+        kpiEmployeeAssignmentRepository.softDeleteByMetricId(id);
         metric.setIsDeleted(true);
 
         kpiMetricRepository.save(metric);

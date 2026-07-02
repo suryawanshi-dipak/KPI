@@ -278,9 +278,15 @@ export default function Kpis() {
                     {!isEmployee && (
                       <td>
                         {isKpiAccessible ? (
-                          <button className="btn btn--ghost" onClick={() => openAssignments(k)}>
-                            View Employees
-                          </button>
+                          // If there are no assignments for this KPI, show "Not Assigned".
+                          // Otherwise render the button to view assigned employees.
+                          (assignments || []).some(a => Number(a.kpi_metric_id) === Number(k.id)) ? (
+                            <button className="btn btn--ghost" onClick={() => openAssignments(k)}>
+                              View Employees
+                            </button>
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--muted)" }}>Not Assigned</div>
+                          )
                         ) : (
                           <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
                         )}

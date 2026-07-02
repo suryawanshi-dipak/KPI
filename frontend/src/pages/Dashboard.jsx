@@ -6,11 +6,11 @@ import { getStats, listKpis, listKras, measurementsForKpi, kraName , listAssignm
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
-  const [kpis, setKpis] = useState([]);
   const [visibleKpis, setVisibleKpis] = useState([]);
   const [kras, setKras] = useState([]);
   const [trend, setTrend] = useState([]);
   const [trendKpi, setTrendKpi] = useState(null);
+  const [yDomain, setYDomain] = useState(null);
 
   useEffect(() => {
 
@@ -80,23 +80,13 @@ export default function Dashboard() {
       );
 
       setStats(statsData);
-      setKpis(allKpis);
       setKras(allKras);
       setVisibleKpis(filteredKpis);
 
       if (filteredKpis.length) {
         const first = filteredKpis[0];
-        setTrendKpi(first);
-        const ms = await measurementsForKpi(first.id);
-        const activeMs = ms.filter(m => !ms.some(other => Number(other.corrected_from_id) === Number(m.id)));
-        setTrend(
-          activeMs
-            .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
-            .map(m => ({
-              period: m.measurement_period_label,
-              value: Number(m.measured_value)
-            }))
-        );
+        // Use shared loader to populate trend and y-axis domain
+        await loadMeasurements(first);
       }
 
     }
@@ -112,6 +102,48 @@ export default function Dashboard() {
   load();
 
 }, []);
+
+// Loads measurements for a KPI and computes Y-axis domain for chart
+async function loadMeasurements(kpi) {
+  if (!kpi) return;
+  try {
+    const ms = await measurementsForKpi(kpi.id);
+    const activeMs = ms.filter(m => !ms.some(other => Number(other.corrected_from_id) === Number(m.id)));
+
+    const filtered = activeMs
+      .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
+      .map(m => ({ period: m.measurement_period_label, value: Number(m.measured_value) }));
+
+    setTrend(filtered);
+    setTrendKpi(kpi);
+
+    // compute dynamic domain including target line
+    const values = filtered.map(f => f.value);
+    const target = kpi?.target_value !== undefined && kpi?.target_value !== null ? Number(kpi.target_value) : null;
+
+    if (values.length || target !== null) {
+      const all = values.concat(target !== null ? [target] : []);
+      let min = Math.min(...all);
+      let max = Math.max(...all);
+      if (min === max) {
+        min = min - Math.abs(min || 10) * 0.1 - 1;
+        max = max + Math.abs(max || 10) * 0.1 + 1;
+      } else {
+        const pad = (max - min) * 0.15;
+        min = Math.floor(min - pad);
+        max = Math.ceil(max + pad);
+      }
+      setYDomain([min, max]);
+    } else {
+      setYDomain(null);
+    }
+
+  } catch (err) {
+    console.error("Failed loading measurements for KPI", err);
+    setTrend([]);
+    setYDomain(null);
+  }
+}
 
   if (!stats) return <Layout crumb={<b>Dashboard</b>}><Spinner /></Layout>;
 
@@ -207,16 +239,37 @@ visibleKpis.forEach((k) => {
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "1.1rem", marginBottom: "1.1rem" }}>
         <div className="card">
-          <div className="card__head">
-            <h3>Trend — {trendKpi?.name || "—"}</h3>
-            {trendKpi && <span className="tag">target {trendKpi.target_value}{trendKpi.unit === "Percentage" ? "%" : ""}</span>}
+          <div className="card__head" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h3 style={{ margin: 0 }}>Trend — {trendKpi?.name || "—"}</h3>
+              {trendKpi && <span className="tag">target {trendKpi.target_value}{trendKpi.unit === "Percentage" ? "%" : ""}</span>}
+            </div>
+
+            {/* KPI selector: choose which KPI's trend to display. Options are already filtered by user's role */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}> </label>
+              <select
+                className="select"
+                value={trendKpi?.id || ''}
+                onChange={async (e) => {
+                  const id = e.target.value;
+                  const sel = visibleKpis.find(k => String(k.id) === String(id));
+                  if (sel) await loadMeasurements(sel);
+                }}
+                style={{ minWidth: 220 }}
+              >
+                {visibleKpis.map(k => (
+                  <option key={k.id} value={k.id}>{k.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="card__body" style={{ height: 260 }}>
             {trend.length ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
                   <XAxis dataKey="period" tick={{ fontSize: 11, fill: "#7d879c" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "#7d879c" }} />
+                  <YAxis domain={yDomain || ['auto','auto']} tick={{ fontSize: 11, fill: "#7d879c" }} />
                   <Tooltip />
                   {trendKpi && <ReferenceLine y={trendKpi.target_value} stroke="#1f8a4c" strokeDasharray="4 4" />}
                   <Line type="monotone" dataKey="value" stroke="#3a5bd9" strokeWidth={2.5} dot={{ r: 3 }} />

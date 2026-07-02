@@ -4,6 +4,9 @@ import com.kpi.dto.request.KraAreaRequest;
 import com.kpi.dto.response.KraAreaResponse;
 import com.kpi.entity.KraArea;
 import com.kpi.exception.ResourceNotFoundException;
+import com.kpi.repository.KpiEmployeeAssignmentRepository;
+import com.kpi.repository.KpiMeasurementRepository;
+import com.kpi.repository.KpiMetricRepository;
 import com.kpi.repository.KraAreaRepository;
 import com.kpi.service.KraAreaService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,9 @@ import java.util.List;
 public class KraAreaServiceImpl implements KraAreaService {
 
     private final KraAreaRepository kraAreaRepository;
+    private final KpiMetricRepository kpiMetricRepository;
+    private final KpiMeasurementRepository kpiMeasurementRepository;
+    private final KpiEmployeeAssignmentRepository kpiEmployeeAssignmentRepository;
 
     @Override
     public List<KraAreaResponse> getAll(boolean activeOnly) {
@@ -61,9 +67,13 @@ public class KraAreaServiceImpl implements KraAreaService {
     @Transactional
     public void delete(Integer id) {
         KraArea area = findOrThrow(id);
-        // Soft delete — KPI metrics referencing this area remain intact in the database
+        // Soft delete the KRA area first.
         area.setIsDeleted(true);
         kraAreaRepository.save(area);
+        // Then cascade the soft delete through child entities in order.
+        kpiMeasurementRepository.softDeleteByKraAreaId(id);
+        kpiEmployeeAssignmentRepository.softDeleteByKraAreaId(id);
+        kpiMetricRepository.softDeleteByKraAreaId(id);
     }
 
     private KraArea findOrThrow(Integer id) {
