@@ -68,6 +68,11 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
     @Override
     @Transactional
     public KpiAssignmentResponse create(KpiAssignmentRequest request) {
+        // Validate if this KPI is already assigned to this employee/user
+        if (assignmentRepository.existsByKpiMetricIdAndEmployeeIdAndIsDeletedFalse(request.getKpiMetricId(), request.getEmployeeId())) {
+            throw new IllegalArgumentException("this KPI is already assigned to the User");
+        }
+
         KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
                 .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee employee = employeeRepository.findById(request.getEmployeeId())
@@ -92,6 +97,11 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
     public KpiAssignmentResponse update(Integer id, KpiAssignmentRequest request) {
         KpiEmployeeAssignment assignment = findOrThrow(id);
 
+        // Validate if this KPI is already assigned to this employee/user (excluding the current assignment)
+        if (assignmentRepository.existsByKpiMetricIdAndEmployeeIdAndIdNotAndIsDeletedFalse(request.getKpiMetricId(), request.getEmployeeId(), id)) {
+            throw new IllegalArgumentException("this KPI is already assigned to the User");
+        }
+
         KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
                 .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee employee = employeeRepository.findById(request.getEmployeeId())
@@ -107,6 +117,7 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
 
         return toResponse(assignmentRepository.save(assignment));
     }
+
 
     @Override
     @Transactional

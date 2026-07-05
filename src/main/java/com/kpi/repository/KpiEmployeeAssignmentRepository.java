@@ -31,6 +31,13 @@ public interface KpiEmployeeAssignmentRepository extends JpaRepository<KpiEmploy
                      "WHERE a.employee.id = :employeeId AND a.isDeleted = false ORDER BY a.id ASC")
        List<KpiEmployeeAssignment> findByEmployeeIdWithDetails(@Param("employeeId") Integer employeeId);
 
+       // Check if an active KPI assignment already exists for the given KPI and employee.
+       boolean existsByKpiMetricIdAndEmployeeIdAndIsDeletedFalse(Integer kpiMetricId, Integer employeeId);
+
+       // Check if an active KPI assignment already exists for the given KPI and employee, excluding a specific assignment ID.
+       boolean existsByKpiMetricIdAndEmployeeIdAndIdNotAndIsDeletedFalse(Integer kpiMetricId, Integer employeeId, Integer id);
+
+
        @Modifying
        @Transactional
        // Soft delete all KPI assignments for a deleted KPI metric.

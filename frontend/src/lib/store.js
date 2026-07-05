@@ -186,6 +186,8 @@ function mapKraToFrontend(b) {
     is_active: b.isActive ? 1 : 0, // Frontend uses numeric 1/0 for boolean flags
     created_at: b.createdAt,
     updated_at: b.updatedAt,
+    created_by: b.createdBy,
+    updated_by: b.updatedBy,
   };
 }
 

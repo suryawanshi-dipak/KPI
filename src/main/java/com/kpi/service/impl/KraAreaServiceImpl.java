@@ -8,8 +8,10 @@ import com.kpi.repository.KpiEmployeeAssignmentRepository;
 import com.kpi.repository.KpiMeasurementRepository;
 import com.kpi.repository.KpiMetricRepository;
 import com.kpi.repository.KraAreaRepository;
+import com.kpi.repository.EmployeeRepository;
 import com.kpi.service.KraAreaService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ public class KraAreaServiceImpl implements KraAreaService {
     private final KpiMetricRepository kpiMetricRepository;
     private final KpiMeasurementRepository kpiMeasurementRepository;
     private final KpiEmployeeAssignmentRepository kpiEmployeeAssignmentRepository;
+    private final EmployeeRepository employeeRepository;
 
     @Override
     public List<KraAreaResponse> getAll(boolean activeOnly) {
@@ -38,14 +41,32 @@ public class KraAreaServiceImpl implements KraAreaService {
         return toResponse(findOrThrow(id));
     }
 
+    private Integer getCurrentUserEmployeeId() {
+        try {
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated()) {
+                String email = authentication.getName();
+                return employeeRepository.findByEmail(email)
+                        .map(com.kpi.entity.Employee::getId)
+                        .orElse(null);
+            }
+        } catch (Exception ignored) {
+            // Ignore and fall back to null
+        }
+        return null;
+    }
+
     @Override
     @Transactional
     public KraAreaResponse create(KraAreaRequest request) {
+        Integer currentUserEmployeeId = getCurrentUserEmployeeId();
         KraArea area = KraArea.builder()
                 .areaName(request.getAreaName())
                 .sortOrder(request.getSortOrder())
                 .financialYear(request.getFinancialYear())
                 .isActive(request.getIsActive() != null ? request.getIsActive() : true)
+                .createdBy(currentUserEmployeeId)
+                .updatedBy(currentUserEmployeeId)
                 .build();
         return toResponse(kraAreaRepository.save(area));
     }
@@ -60,6 +81,7 @@ public class KraAreaServiceImpl implements KraAreaService {
         if (request.getIsActive() != null) {
             area.setIsActive(request.getIsActive());
         }
+        area.setUpdatedBy(getCurrentUserEmployeeId());
         return toResponse(kraAreaRepository.save(area));
     }
 

@@ -3,7 +3,7 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KraForm from "../forms/KraForm";
-import { listKras, listKpis, saveKra, getStats, deleteKra, getCurrentUser } from "../lib/store";
+import { listKras, listKpis, saveKra, getStats, deleteKra, getCurrentUser, listAssignments, employeeName, listEmployees} from "../lib/store";
 
 export default function Kras() {
   const [kras, setKras] = useState(null);
@@ -13,9 +13,13 @@ export default function Kras() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [kraFilter, setKraFilter] = useState("all");
+  const [q, setQ] = useState("");
 
-  const load = () => Promise.all([listKras(), listKpis(), getStats(), getCurrentUser()])
-    .then(([r, k, s, user]) => { setKras(r); setKpis(k); setStats(s); setCurrentUser(user); });
+  const load = () => Promise.all([listKras(), listKpis(), getStats(), getCurrentUser(), listAssignments(), listEmployees()])
+    .then(([r, k, s, user, a, e]) => { setKras(r); setKpis(k); setStats(s); setCurrentUser(user); setAssignments(a); setEmployees(e); });
   useEffect(() => { load(); }, []);
 
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
@@ -36,6 +40,55 @@ export default function Kras() {
   if (!kras || !stats || !currentUser) return <Layout crumb={<b>KRA Areas</b>}><Spinner /></Layout>;
 
   const isEmployee = currentUser.role === "employee";
+  const isManager = currentUser.role === "manager";
+  const isAdmin = currentUser.role === "admin";
+
+  const visibleKras = (() => {
+    if (kraFilter === "all") return kras;
+
+    const currentUserId = Number(currentUser.id);
+
+    if (kraFilter === "my") {
+      const assignedKpiIds = new Set(
+        assignments
+          .filter((assignment) => Number(assignment.employee_id) === currentUserId)
+          .map((assignment) => Number(assignment.kpi_metric_id))
+      );
+
+      return kras.filter((kra) => {
+        const areaKpis = kpis.filter((kpi) => Number(kpi.kra_area_id) === Number(kra.id));
+        const isCreatedByMe = Number(kra.created_by) === currentUserId;
+        const hasAssignedKpi = areaKpis.some((kpi) => assignedKpiIds.has(Number(kpi.id)));
+        return isCreatedByMe || hasAssignedKpi;
+      });
+    }
+
+    const selectedPersonId = Number(kraFilter);
+    if (!Number.isNaN(selectedPersonId) && selectedPersonId > 0) {
+      const selectedPersonKpiIds = new Set(
+        assignments
+          .filter((assignment) => Number(assignment.employee_id) === selectedPersonId)
+          .map((assignment) => Number(assignment.kpi_metric_id))
+      );
+
+      return kras.filter((kra) => {
+        const areaKpis = kpis.filter((kpi) => Number(kpi.kra_area_id) === Number(kra.id));
+        const isCreatedBySelectedPerson = Number(kra.created_by) === selectedPersonId;
+        const hasSelectedPersonKpi = areaKpis.some((kpi) => selectedPersonKpiIds.has(Number(kpi.id)));
+        return isCreatedBySelectedPerson || hasSelectedPersonKpi;
+      });
+    }
+
+    return kras;
+  })();
+
+  const filteredKras = visibleKras.filter((kra) => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return true;
+    return [kra.area_name, kra.financial_year]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle));
+  });
 
   return (
     <Layout crumb={<><span>Configuration</span> · <b>KRA Areas</b></>}>
@@ -46,8 +99,44 @@ export default function Kras() {
         )}
       </div>
 
+      <div className="filter-bar" style={{ marginBottom: "1rem" }}>
+        <div className="search">
+          <Icon.search />
+          <input placeholder="Search KRA areas…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
+            Filter:
+          </span>
+          <select
+            className="select"
+            style={{ width: "auto", minWidth: "180px", padding: "0.45rem 0.6rem" }}
+            value={kraFilter}
+            onChange={(e) => setKraFilter(e.target.value)}
+          >
+            <option value="all">Show All KRAs</option>
+            <option value="my">My KRAs</option>
+            {isManager && employees
+              .filter((employee) => Number(employee.managerId) === Number(currentUser.id) && Number(employee.id) !== Number(currentUser.id))
+              .map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            {isAdmin && employees
+              .filter((employee) => employee.role === "manager" && Number(employee.id) !== Number(currentUser.id))
+              .map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.name}
+                </option>
+              ))}
+          </select>
+        </div>
+        <span className="tag">{filteredKras.length} of {visibleKras.length}</span>
+      </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:"1rem" }}>
-        {kras.map((kra) => {
+        {filteredKras.map((kra) => {
           const areaKpis = kpis.filter((k) => Number(k.kra_area_id) === Number(kra.id));
           const counts = { green:0, amber:0, red:0 };
           areaKpis.forEach((k) => {
@@ -61,7 +150,9 @@ export default function Kras() {
               <div className="card__head">
                 <div>
                   <h3>{kra.area_name}</h3>
-                  <div className="cell-sub" style={{marginTop:2}}>{kra.financial_year}</div>
+                  <div className="cell-sub" style={{marginTop:2}}>
+                    {kra.financial_year} · Created by: {employeeName(kra.created_by)}
+                  </div>
                 </div>
                 {!isEmployee && (
                   <div style={{ display: "flex", gap: "0.25rem" }}>

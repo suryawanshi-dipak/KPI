@@ -5,7 +5,7 @@ import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KpiForm from "../forms/KpiForm";
 import MeasurementForm from "../forms/MeasurementForm";
-import { listKpis, saveKpi, getStats, kraName, saveMeasurement , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser } from "../lib/store";
+import { listKpis, saveKpi, getStats, kraName, saveMeasurement , employeeName , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser } from "../lib/store";
 import KpiAssignmentForm from "../forms/KpiAssignmentForm";
 
 export default function Kpis() {
@@ -112,7 +112,8 @@ export default function Kpis() {
       flash(payload.id ? "Assignment updated" : "Assignment created");
     } catch (err) {
       console.error(err);
-      flash("Failed to save assignment");
+      // Display the specific server/exception error message if available
+      flash(err.message || "Failed to save assignment");
     } finally {
       setSaving(false);
     }
@@ -162,15 +163,24 @@ export default function Kpis() {
           .filter((a) => Number(a.employee_id) === Number(currentUser.id))
           .map((a) => Number(a.kpi_metric_id))
       );
-      baseKpis = kpis.filter((k) => myKpiIds.has(Number(k.id)));
+      // Filter KPIs: show KPIs assigned to self OR created by self
+      baseKpis = kpis.filter((k) => myKpiIds.has(Number(k.id)) || Number(k.created_by) === Number(currentUser.id));
     } else if (managerFilter !== "all") {
       const selectedMemberId = Number(managerFilter);
+      const selectedMember = employees.find(e => Number(e.id) === selectedMemberId);
       const memberKpiIds = new Set(
         assignments
           .filter((a) => Number(a.employee_id) === selectedMemberId)
           .map((a) => Number(a.kpi_metric_id))
       );
-      baseKpis = kpis.filter((k) => memberKpiIds.has(Number(k.id)));
+      
+      // If the target is a manager or admin, show KPIs assigned to them OR created by them.
+      const isTargetManagerOrAdmin = selectedMember && (selectedMember.role === "manager" || selectedMember.role === "admin");
+      
+      baseKpis = kpis.filter((k) => 
+        memberKpiIds.has(Number(k.id)) || 
+        (isTargetManagerOrAdmin && Number(k.created_by) === selectedMemberId)
+      );
     }
   }
 
@@ -179,6 +189,20 @@ export default function Kpis() {
     k.name.toLowerCase().includes(q.toLowerCase()) ||
     kraName(k.kra_area_id).toLowerCase().includes(q.toLowerCase())
   );
+
+  // For managers/admins, show self-created KPIs first, then the rest.
+  // This keeps the current user’s own KPIs at the top of the list.
+  const orderedKpis = [...filtered];
+  if ((isManager || isAdmin) && currentUser) {
+    orderedKpis.sort((a, b) => {
+      const aSelf = Number(a.created_by) === Number(currentUser.id) ? 0 : 1;
+      const bSelf = Number(b.created_by) === Number(currentUser.id) ? 0 : 1;
+
+      if (aSelf !== bSelf) return aSelf - bSelf;
+      // Keep the list stable and readable by sorting by KPI name afterward.
+      return a.name.localeCompare(b.name);
+    });
+  }
 
   return (
     <Layout crumb={<><span>Configuration</span> · <b>KPIs</b></>}>
@@ -249,11 +273,13 @@ export default function Kpis() {
                 <th>Direction</th>
                 <th>Frequency</th>
                 <th>Latest status</th>
+                <th>Created By</th>
                 <th>Actions</th>
+
               </tr>
             </thead>
             <tbody>
-              {filtered.map((k) => {
+              {orderedKpis.map((k) => {
                 const m = stats.latestByKpi[k.id];
                 const myTeamEmployeeIds = new Set(
                   employees
@@ -281,9 +307,7 @@ export default function Kpis() {
                           // If there are no assignments for this KPI, show "Not Assigned".
                           // Otherwise render the button to view assigned employees.
                           (assignments || []).some(a => Number(a.kpi_metric_id) === Number(k.id)) ? (
-                            <button className="btn btn--ghost" onClick={() => openAssignments(k)}>
-                              View Employees
-                            </button>
+                            <button className="btn btn--ghost" onClick={() => openAssignments(k)}>View Employees</button>
                           ) : (
                             <div style={{ textAlign: "center", color: "var(--muted)" }}>Not Assigned</div>
                           )
@@ -300,6 +324,7 @@ export default function Kpis() {
                     <td className="cell-sub">{k.direction === "higher_better" ? "Higher ↑" : "Lower ↓"}</td>
                     <td className="cell-sub">{cap(k.frequency)}</td>
                     <td><StatusPill status={m?.status || "unknown"} /></td>
+                    <td className="cell-sub">{employeeName(k.created_by)}</td>
                     <td>
                       {isKpiAccessible ? (
                         <div className="cell-actions">
@@ -370,6 +395,7 @@ export default function Kpis() {
       saving={saving}
       onSubmit={handleAssignmentSave}
       onCancel={() => setAssigning(null)}
+      assignments={assignments} // Pass current assignments for duplicate validation
     />
   </Modal>
 )}
@@ -444,6 +470,7 @@ export default function Kpis() {
       saving={saving}
       onSubmit={handleAssignmentSave}
       onCancel={() => setEditingAssignment(null)}
+      assignments={assignments} // Pass current assignments for duplicate validation
     />
 
   </Modal>

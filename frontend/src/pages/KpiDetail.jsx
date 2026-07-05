@@ -30,7 +30,9 @@ export default function KpiDetail() {
 
   const chartData = activeMs
     .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
-    .map((m) => ({
+    // Added index key to guarantee unique keys on XAxis, resolving the Recharts duplicate key tooltip bug
+    .map((m, i) => ({
+      index: i,
       period: m.measurement_period_label,
       value: Number(m.measured_value)
     }));
@@ -60,9 +62,11 @@ export default function KpiDetail() {
           {chartData.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top:8, right:14, bottom:4, left:-14 }}>
-                <XAxis dataKey="period" tick={{ fontSize:11, fill:"#7d879c" }} />
+                {/* Using index as dataKey and tickFormatter to display period label cleanly, preventing hover index overlap */}
+                <XAxis dataKey="index" tickFormatter={(tick) => chartData[tick]?.period || ""} tick={{ fontSize:11, fill:"#7d879c" }} />
                 <YAxis tick={{ fontSize:11, fill:"#7d879c" }} />
-                <Tooltip />
+                {/* custom labelFormatter to map index back to the period name */}
+                <Tooltip labelFormatter={(label) => chartData[label]?.period || ""} />
                 <ReferenceLine y={kpi.target_value} stroke="#1f8a4c" strokeDasharray="4 4" />
                 <Line type="monotone" dataKey="value" stroke="#3a5bd9" strokeWidth={2.5} dot={{ r:3 }} />
               </LineChart>

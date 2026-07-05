@@ -16,6 +16,7 @@ export default function KpiAssignmentForm({
   saving,
   onSubmit,
   onCancel,
+  assignments = [], // Added assignments prop for local duplicate validation
 }) {
   const [form, setForm] = useState({
     ...BLANK,
@@ -29,6 +30,15 @@ export default function KpiAssignmentForm({
     listEmployees().then(setEmployees);
     getCurrentUser().then(setCurrentUser);
   }, []);
+
+  // Check locally if the KPI is already assigned to the selected user (excluding the current assignment)
+  const isDuplicate = form.employee_id && assignments.some(a => 
+    Number(a.kpi_metric_id) === Number(kpiId) &&
+    Number(a.employee_id) === Number(form.employee_id) &&
+    Number(a.id) !== Number(form.id)
+  );
+
+  const error = isDuplicate ? "this KPI is already assigned to the User" : "";
 
   const set = (k) => (e) => {
     const v =
@@ -60,7 +70,8 @@ function submit(ev) {
     <form onSubmit={submit}>
       <div className="form-grid">
 
-        <Field label="Employee" required>
+        {/* Display validation error message in red lines if assignment is duplicate */}
+        <Field label="Employee" required error={error}>
           <select
             className="select"
             value={form.employee_id}
@@ -72,11 +83,11 @@ function submit(ev) {
 
             {currentUser && employees
               .filter((e) => {
-                // If the logged-in user is a manager, restrict the visible options to their direct reports (team members)
+                // If the logged-in user is a manager, restrict the visible options to their direct reports (team members) OR themselves
                 if (currentUser.role === "manager") {
-                  return Number(e.managerId) === Number(currentUser.id);
+                  return Number(e.managerId) === Number(currentUser.id) || Number(e.id) === Number(currentUser.id);
                 }
-                // Administrators, HR, and other roles see all employees in the system
+                // Administrators, HR, and other roles see all employees in the system (including themselves)
                 return true;
               })
               .map((e) => (
@@ -143,10 +154,11 @@ function submit(ev) {
           Cancel
         </button>
 
+        {/* Disable the button if saving is in progress or if the assignment is a duplicate */}
         <button
           type="submit"
           className="btn btn--primary"
-          disabled={saving}
+          disabled={saving || isDuplicate}
         >
           {saving ? "Saving…" : "Save Assignment"}
         </button>
