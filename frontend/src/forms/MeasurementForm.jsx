@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
-import { Field, StatusPill } from "../components/UI";
-import { ENUMS, listKpis, listEmployees, kraName, getCurrentUser, listAssignments } from "../lib/store";
+import { Field, StatusPill, Modal } from "../components/UI";
+import { ENUMS, listKpis, listEmployees, kraName, getCurrentUser, listAssignments, saveAssignment } from "../lib/store";
 import { computeStatus } from "../lib/status";
+import KpiAssignmentForm from "./KpiAssignmentForm";
 
 const BLANK = {
   kpi_metric_id: "",
@@ -25,6 +26,9 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   const [people, setPeople] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  // Local states to handle the admin's on-the-fly KPI assignment dialog
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assigningProgress, setAssigningProgress] = useState(false);
 
   useEffect(() => {
     listKpis().then(setKpis);
@@ -76,6 +80,14 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     }
     return people;
   }, [people, currentUser]);
+
+  // Check if the currently selected KPI is assigned to the selected person
+  const isKpiAssignedToSelectedUser = useMemo(() => {
+    if (!form.kpi_metric_id || !form.measured_by) return true;
+    return assignments.some(
+      (a) => Number(a.employee_id) === Number(form.measured_by) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
+    );
+  }, [assignments, form.kpi_metric_id, form.measured_by]);
 
   const kpi = useMemo(
     () => filteredKpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
@@ -133,7 +145,9 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     
     if (!form.measured_by) {
       e.measured_by = "Select who recorded this.";
-    } else if (currentUser?.role === "manager") {
+    } else if (currentUser?.role === "manager" || currentUser?.role === "admin") {
+      // Validate that the chosen user is actually assigned to the KPI before recording a measurement.
+      // Admins are allowed to select anyone, but they must assign the KPI first using the warning prompt below.
       const isAssigned = assignments.some(
         (a) => Number(a.employee_id) === Number(form.measured_by) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
       );
@@ -145,6 +159,27 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     setErrors(e);
     return Object.keys(e).length === 0;
   }
+
+  // Handle on-the-fly KPI assignment for administrators
+  const handleAssignSubmit = (assignmentData) => {
+    setAssigningProgress(true);
+    saveAssignment(assignmentData)
+      .then(() => {
+        // Refresh local assignments list so the dropdown validation immediately passes
+        return listAssignments();
+      })
+      .then((updatedAssignments) => {
+        setAssignments(updatedAssignments);
+        setShowAssignModal(false);
+      })
+      .catch((err) => {
+        console.error("Failed to assign KPI on the fly:", err);
+        alert(err.message || "Failed to save assignment.");
+      })
+      .finally(() => {
+        setAssigningProgress(false);
+      });
+  };
 
   function submit(ev) {
     ev.preventDefault();
@@ -258,6 +293,33 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
               );
             })}
           </select>
+
+          {/* Admin Helper UI: If the selected employee is not assigned to the chosen KPI, show warning and Assign button */}
+          {currentUser?.role === "admin" && form.kpi_metric_id && form.measured_by && !isKpiAssignedToSelectedUser && (
+            <div style={{
+              marginTop: "0.5rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.75rem",
+              background: "var(--warn-bg, #fbefd9)",
+              border: "1px solid var(--warn, #b8780f)",
+              padding: "0.5rem 0.75rem",
+              borderRadius: "6px"
+            }}>
+              <span style={{ fontSize: "0.85rem", color: "var(--warn, #b8780f)", fontWeight: 500 }}>
+                This KPI is not assigned to the selected user.
+              </span>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", height: "auto" }}
+                onClick={() => setShowAssignModal(true)}
+              >
+                Assign
+              </button>
+            </div>
+          )}
         </Field>
 
         <div className="field">
@@ -297,6 +359,24 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
           {saving ? "Saving…" : "Save measurement"}
         </button>
       </div>
+
+      {/* Nested assignment modal for admins */}
+      {showAssignModal && (
+        <Modal
+          title="Assign KPI on the Fly"
+          subtitle={`Assigning KPI to ${people.find((p) => Number(p.id) === Number(form.measured_by))?.name}`}
+          onClose={() => setShowAssignModal(false)}
+          wide
+        >
+          <KpiAssignmentForm
+            kpiId={form.kpi_metric_id}
+            initial={{ employee_id: form.measured_by }}
+            saving={assigningProgress}
+            onSubmit={handleAssignSubmit}
+            onCancel={() => setShowAssignModal(false)}
+          />
+        </Modal>
+      )}
     </form>
   );
 }
