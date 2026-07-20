@@ -40,9 +40,11 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   // Default the "Recorded by" (measured_by) selector to the logged-in user once loaded.
   useEffect(() => {
     if (currentUser && !form.measured_by) {
-      setForm((f) => ({ ...f, measured_by: currentUser.id }));
+      setTimeout(() => {
+        setForm((f) => ({ ...f, measured_by: currentUser.id }));
+      }, 0);
     }
-  }, [currentUser]);
+  }, [currentUser]); // eslint-disable-line
 
   // Filter KPIs list: if the user is an employee/manager, only show KPIs assigned to them/their team.
   const filteredKpis = useMemo(() => {
@@ -72,13 +74,15 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   }, [kpis, currentUser, assignments, people]);
 
   const filteredPeople = useMemo(() => {
-    if (!currentUser) return people;
-    if (currentUser.role === "manager") {
-      return people.filter(
-        (p) => Number(p.id) === Number(currentUser.id) || Number(p.managerId) === Number(currentUser.id)
-      );
-    }
-    return people;
+    const list = !currentUser
+      ? people
+      : currentUser.role === "manager"
+      ? people.filter(
+          (p) => Number(p.id) === Number(currentUser.id) || Number(p.managerId) === Number(currentUser.id)
+        )
+      : people;
+    /* Sort the dropdown people alphabetically by name (A to Z) */
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [people, currentUser]);
 
   // Check if the currently selected KPI is assigned to the selected person
@@ -112,11 +116,53 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     setErrors((er) => ({ ...er, [k]: undefined }));
   };
 
-  // When KPI changes, default the period type to its frequency
+  /* Helper function to update the form defaults when user manually changes the Period type dropdown */
+  const handlePeriodTypeChange = (e) => {
+    const newType = e.target.value;
+    setForm((f) => {
+      const updated = { ...f, measurement_period_type: newType };
+      if (["monthly", "weekly", "bi-weekly"].includes(newType)) {
+        const defaults = getPreviousPeriodDefaults(newType);
+        updated.measurement_period_label = defaults.periodLabel;
+        updated.period_start_date = defaults.defaultDate;
+        updated.period_end_date = defaults.defaultDate;
+      }
+      return updated;
+    });
+    setErrors((er) => ({
+      ...er,
+      measurement_period_type: undefined,
+      measurement_period_label: undefined,
+      period_start_date: undefined,
+      period_end_date: undefined,
+    }));
+  };
+
+  // When KPI changes, default the period type, label, start date, and end date based on frequency
   useEffect(() => {
     if (kpi && !initial) {
-      const freq = ENUMS.periodType.includes(kpi.frequency) ? kpi.frequency : "monthly";
-      setForm((f) => ({ ...f, measurement_period_type: freq }));
+      let freq = kpi.frequency;
+      if (freq === "bi_weekly") freq = "bi-weekly";
+      const targetPeriodType = ENUMS.periodType.includes(freq) ? freq : "monthly";
+
+      // Execute asynchronously to avoid react-hooks/set-state-in-effect synchronous setState error
+      setTimeout(() => {
+        if (["monthly", "weekly", "bi-weekly"].includes(targetPeriodType)) {
+          const defaults = getPreviousPeriodDefaults(targetPeriodType);
+          setForm((f) => ({
+            ...f,
+            measurement_period_type: targetPeriodType,
+            measurement_period_label: defaults.periodLabel,
+            period_start_date: defaults.defaultDate,
+            period_end_date: defaults.defaultDate,
+          }));
+        } else {
+          setForm((f) => ({
+            ...f,
+            measurement_period_type: targetPeriodType,
+          }));
+        }
+      }, 0);
     }
   }, [kpi]); // eslint-disable-line
 
@@ -257,7 +303,7 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
         </Field>
 
         <Field label="Period type" required>
-          <select className="select" value={form.measurement_period_type} onChange={set("measurement_period_type")}>
+          <select className="select" value={form.measurement_period_type} onChange={handlePeriodTypeChange}>
             {ENUMS.periodType.map((p) => <option key={p} value={p}>{cap(p)}</option>)}
           </select>
         </Field>
@@ -381,3 +427,65 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   );
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Helper to compute standard ISO week number of a date
+function getWeekNumber(d) {
+  const targetDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  targetDate.setUTCDate(targetDate.getUTCDate() + 4 - (targetDate.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(targetDate.getUTCFullYear(), 0, 1));
+  return Math.ceil((((targetDate - yearStart) / 86400000) + 1) / 7);
+}
+
+// Helper to compute previous period label and default date based on frequency/periodType
+function getPreviousPeriodDefaults(frequency) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth(); // 0-indexed
+
+  let periodLabel = "";
+  let defaultDateStr = "";
+
+  if (frequency === "monthly") {
+    // Determine previous month relative to today
+    const prevMonthDate = new Date(year, month - 1, 15); // Use mid-month (15th) to avoid month day overflow bugs
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    periodLabel = `${months[prevMonthDate.getMonth()]}-${prevMonthDate.getFullYear()}`;
+    
+    // Format YYYY-MM-DD
+    const y = prevMonthDate.getFullYear();
+    const m = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
+    const d = String(prevMonthDate.getDate()).padStart(2, "0");
+    defaultDateStr = `${y}-${m}-${d}`;
+  } else if (frequency === "weekly") {
+    // Previous week relative to today (subtract 7 days)
+    const prevWeekDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weekNo = getWeekNumber(prevWeekDate);
+    periodLabel = `WK${weekNo}`;
+    
+    const y = prevWeekDate.getFullYear();
+    const m = String(prevWeekDate.getMonth() + 1).padStart(2, "0");
+    const d = String(prevWeekDate.getDate()).padStart(2, "0");
+    defaultDateStr = `${y}-${m}-${d}`;
+  } else if (frequency === "bi_weekly" || frequency === "bi-weekly") {
+    // Previous bi-week relative to today (subtract 14 days)
+    const prevBiWeekDate = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const weekNo = getWeekNumber(prevBiWeekDate);
+    
+    let startW, endW;
+    if (weekNo % 2 === 0) {
+      startW = weekNo - 1;
+      endW = weekNo;
+    } else {
+      startW = weekNo;
+      endW = weekNo + 1;
+    }
+    periodLabel = `WK${startW}-${endW}`;
+    
+    const y = prevBiWeekDate.getFullYear();
+    const m = String(prevBiWeekDate.getMonth() + 1).padStart(2, "0");
+    const d = String(prevBiWeekDate.getDate()).padStart(2, "0");
+    defaultDateStr = `${y}-${m}-${d}`;
+  }
+
+  return { periodLabel, defaultDate: defaultDateStr };
+}

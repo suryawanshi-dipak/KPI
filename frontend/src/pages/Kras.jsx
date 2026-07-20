@@ -118,6 +118,8 @@ export default function Kras() {
             <option value="my">My KRAs</option>
             {isManager && employees
               .filter((employee) => Number(employee.managerId) === Number(currentUser.id) && Number(employee.id) !== Number(currentUser.id))
+              /* Sort employee options alphabetically A to Z */
+              .sort((a, b) => a.name.localeCompare(b.name))
               .map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name}
@@ -125,6 +127,8 @@ export default function Kras() {
               ))}
             {isAdmin && employees
               .filter((employee) => employee.role === "manager" && Number(employee.id) !== Number(currentUser.id))
+              /* Sort manager options alphabetically A to Z */
+              .sort((a, b) => a.name.localeCompare(b.name))
               .map((manager) => (
                 <option key={manager.id} value={manager.id}>
                   {manager.name}

@@ -108,11 +108,11 @@ export default function Kpis() {
         const rows = await assignmentsForKpi(viewAssignments.id);
         setAssignmentRows(rows);
       }
-      await load();
+      const updatedAssignments = await listAssignments();
+      setAssignments(updatedAssignments);
       flash(payload.id ? "Assignment updated" : "Assignment created");
     } catch (err) {
       console.error(err);
-      // Display the specific server/exception error message if available
       flash(err.message || "Failed to save assignment");
     } finally {
       setSaving(false);
@@ -121,14 +121,21 @@ export default function Kpis() {
 
   async function handleDeleteAssignment(id) {
     if (!window.confirm("Delete this assignment?")) return;
+    setSaving(true);
     try {
       await deleteAssignment(id);
-      const rows = await assignmentsForKpi(viewAssignments.id);
+      const [rows, updatedAssignments] = await Promise.all([
+        assignmentsForKpi(viewAssignments.id),
+        listAssignments(),
+      ]);
       setAssignmentRows(rows);
+      setAssignments(updatedAssignments);
       flash("Assignment deleted");
     } catch (err) {
       console.error(err);
       flash("Failed to delete assignment");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -241,6 +248,8 @@ export default function Kpis() {
               <option value="self">Only My KPIs</option>
               {isManager && employees
                 .filter((e) => Number(e.managerId) === Number(currentUser.id))
+                /* Sort employee options alphabetically A to Z */
+                .sort((a, b) => a.name.localeCompare(b.name))
                 .map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name}
@@ -248,6 +257,8 @@ export default function Kpis() {
                 ))}
               {isAdmin && employees
                 .filter((e) => Number(e.id) !== Number(currentUser.id))
+                /* Sort employee/manager options alphabetically A to Z */
+                .sort((a, b) => a.name.localeCompare(b.name))
                 .map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name} ({cap(e.role)})

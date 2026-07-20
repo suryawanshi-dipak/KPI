@@ -22,9 +22,13 @@ export default function EmployeeForm({ initial, onSubmit, onCancel, saving }) {
   const [managers, setManagers] = useState([]);
 
   useEffect(() => {
-    listEmployees().then((all) =>
-      setManagers(all.filter((e) => e.role === "manager" || e.role === "admin"))
-    );
+    listEmployees().then((all) => {
+      /* Filter for managers/admins and sort them alphabetically A to Z */
+      const sortedManagers = all
+        .filter((e) => e.role === "manager" || e.role === "admin")
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setManagers(sortedManagers);
+    });
   }, []);
 
   const set = (k) => (e) => {

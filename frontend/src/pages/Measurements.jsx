@@ -19,6 +19,8 @@ export default function Measurements() {
   const [toast, setToast] = useState(null);
   const [q, setQ] = useState("");
 
+  function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
+
   // Retrieve current user and all reference datasets from backend
   const load = async () => {
     try {
@@ -50,7 +52,6 @@ export default function Measurements() {
   useEffect(() => { load(); }, []);
 
   const kpiName = (id) => kpis.find((k) => Number(k.id) === Number(id))?.name || "—";
-  function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
 
   // 1. Role-based base visibility filtering
   let visibleMeasurements = [];
@@ -210,6 +211,8 @@ async function handleDelete(id) {
                   <option value="self">Only My Measurements</option>
                   {employees
                     .filter((e) => Number(e.managerId) === Number(currentUser.id))
+                    /* Sort manager's team employees alphabetically A to Z */
+                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((e) => (
                       <option key={e.id} value={e.id}>
                         {e.name}
@@ -219,11 +222,14 @@ async function handleDelete(id) {
               )}
               {currentUser.role === "admin" && (
                 <>
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name} ({cap(e.role)})
-                    </option>
-                  ))}
+                  {employees
+                    /* Sort all employees alphabetically A to Z for admin */
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({cap(e.role)})
+                      </option>
+                    ))}
                 </>
               )}
             </select>

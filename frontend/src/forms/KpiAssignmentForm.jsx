@@ -90,6 +90,8 @@ function submit(ev) {
                 // Administrators, HR, and other roles see all employees in the system (including themselves)
                 return true;
               })
+              /* Sort employee options alphabetically A to Z */
+              .sort((a, b) => a.name.localeCompare(b.name))
               .map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
