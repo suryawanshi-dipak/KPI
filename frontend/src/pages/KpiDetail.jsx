@@ -1,31 +1,106 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
-import { getKpi, measurementsForKpi, saveMeasurement, kraName, employeeName } from "../lib/store";
+import { getCurrentUser, getKpi, listEmployees, measurementsForKpi, saveMeasurement, kraName, employeeName, listAssignments } from "../lib/store";
+
+function buildViewOptions(currentUser, employeesList, assignmentsList, kpiId) {
+  const options = [];
+
+  if (!currentUser) return options;
+
+  const assignedEmployeeIds = (assignmentsList || [])
+    .filter((a) => Number(a.kpi_metric_id) === Number(kpiId))
+    .map((a) => Number(a.employee_id));
+
+  if (String(currentUser.role).toLowerCase() === "manager") {
+    if (assignedEmployeeIds.includes(Number(currentUser.id))) {
+      options.push({ id: Number(currentUser.id), name: currentUser.name || "Me", role: currentUser.role });
+    }
+    const reports = employeesList.filter((employee) => Number(employee.managerId) === Number(currentUser.id));
+    reports.forEach((employee) => {
+      if (assignedEmployeeIds.includes(Number(employee.id))) {
+        if (!options.some((option) => Number(option.id) === Number(employee.id))) {
+          options.push({ id: Number(employee.id), name: employee.name, role: employee.role });
+        }
+      }
+    });
+  } else if (String(currentUser.role).toLowerCase() === "admin") {
+    employeesList.forEach((employee) => {
+      if (assignedEmployeeIds.includes(Number(employee.id))) {
+        const isSelf = Number(employee.id) === Number(currentUser.id);
+        options.push({
+          id: Number(employee.id),
+          name: isSelf ? `${employee.name || "Me"} (Admin)` : employee.name,
+          role: employee.role
+        });
+      }
+    });
+  }
+
+  if (options.length === 0) {
+    options.push({ id: Number(currentUser.id), name: currentUser.name || "Me", role: currentUser.role });
+  }
+
+  return options;
+}
 
 export default function KpiDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const [kpi, setKpi] = useState(null);
   const [ms, setMs] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [viewOptions, setViewOptions] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const load = () => Promise.all([getKpi(id), measurementsForKpi(id)]).then(([k,m]) => { setKpi(k); setMs(m); });
-  useEffect(() => { load(); }, [id]);
+  const load = async () => {
+    const [kpiData, measurementsData, user, employeesList, assignmentsList] = await Promise.all([
+      getKpi(id),
+      measurementsForKpi(id),
+      getCurrentUser(),
+      listEmployees(),
+      listAssignments(),
+    ]);
+
+    const options = buildViewOptions(user, employeesList, assignmentsList, id);
+    const params = new URLSearchParams(location.search);
+    const requestedUserId = Number(params.get("viewUser"));
+    const canSelectUser = user && ["manager", "admin"].includes(String(user.role).toLowerCase());
+    const defaultUserId = canSelectUser
+      ? (options.some((option) => Number(option.id) === Number(requestedUserId))
+          ? Number(requestedUserId)
+          : (options.find((option) => Number(option.id) === Number(selectedUserId))?.id ?? options[0]?.id ?? user.id))
+      : Number(user.id);
+
+    setKpi(kpiData);
+    setMs(measurementsData);
+    setCurrentUser(user);
+    setViewOptions(options);
+    setSelectedUserId(defaultUserId);
+  };
+  useEffect(() => { load(); }, [id, location.search]);
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
   async function handleSave(p){ setSaving(true); await saveMeasurement(p); setSaving(false); setAdding(false); await load(); flash("Measurement saved"); }
 
   if (!kpi) return <Layout crumb={<b>KPI</b>}><Spinner /></Layout>;
 
-  const activeMs = ms.filter(m => {
-    // A measurement is superseded if there is another measurement in ms whose corrected_from_id matches its id
-    return !ms.some(other => Number(other.corrected_from_id) === Number(m.id));
+  const canSelectUser = currentUser && ["manager", "admin"].includes(String(currentUser.role).toLowerCase());
+  const effectiveUserId = selectedUserId ?? currentUser?.id ?? null;
+  const visibleMeasurements = effectiveUserId
+    ? ms.filter((measurement) => Number(measurement.measured_by) === Number(effectiveUserId))
+    : ms;
+
+  const activeMs = visibleMeasurements.filter(m => {
+    // A measurement is superseded if there is another measurement in visibleMeasurements whose corrected_from_id matches its id
+    return !visibleMeasurements.some(other => Number(other.corrected_from_id) === Number(m.id));
   });
 
   const chartData = activeMs
@@ -41,12 +116,33 @@ export default function KpiDetail() {
 
   return (
     <Layout crumb={<><span onClick={()=>nav("/kpis")} style={{cursor:"pointer"}}>KPIs</span> · <b>{kpi.name}</b></>}>
-      <div className="page-head">
+      <div className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
         <div>
           <h1>{kpi.name}</h1>
           <p>{kraName(kpi.kra_area_id)} · {cap(kpi.frequency)} · target {kpi.direction==="higher_better"?"≥":"≤"} {kpi.target_value}{kpi.unit==="Percentage"?"%":` ${kpi.unit}`}</p>
         </div>
-        <button className="btn btn--primary" onClick={()=>setAdding(true)}><Icon.measure /> Enter measurement</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+          {canSelectUser && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              <label style={{ fontSize: "0.85rem", color: "var(--ink-soft)", fontWeight: 600 }}>View by employee</label>
+              <select
+                className="select"
+                value={effectiveUserId || ""}
+                onChange={(event) => setSelectedUserId(Number(event.target.value))}
+                style={{ minWidth: 220 }}
+              >
+                {viewOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}{option.role ? ` (${option.role})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button className="btn btn--primary" style={{ alignSelf: "flex-end", height: 42 }} onClick={()=>setAdding(true)}>
+            <Icon.measure /> Enter measurement
+          </button>
+        </div>
       </div>
 
       <div className="stat-grid">
@@ -57,7 +153,12 @@ export default function KpiDetail() {
       </div>
 
       <div className="card" style={{ marginBottom:"1.1rem" }}>
-        <div className="card__head"><h3>Trend over time</h3><span className="tag">target line shown</span></div>
+        <div className="card__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <h3 style={{ margin: 0 }}>Trend over time</h3>
+            <span className="tag">target line shown</span>
+          </div>
+        </div>
         <div className="card__body" style={{ height:280 }}>
           {chartData.length ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -81,7 +182,7 @@ export default function KpiDetail() {
           <table className="data">
             <thead><tr><th>Period</th><th>Value</th><th>Status</th><th>By</th><th>Note</th><th>Post-action</th></tr></thead>
             <tbody>
-              {[...ms].reverse().map((m) => (
+              {[...visibleMeasurements].reverse().map((m) => (
                 <tr key={m.id}>
                   <td><div className="mono">{m.measurement_period_label}</div><div className="cell-sub">{m.period_start_date} → {m.period_end_date}</div></td>
                   <td className="mono">{m.is_pending?"—":m.measured_value}</td>

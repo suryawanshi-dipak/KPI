@@ -1,10 +1,12 @@
 package com.kpi.controller;
 
+import com.kpi.dto.request.EmployeeRequest;
 import com.kpi.dto.response.ApiResponse;
 import com.kpi.dto.response.EmployeeResponse;
 import com.kpi.service.EmployeeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,10 +29,14 @@ public class EmployeeController {
     }
 
     @GetMapping("/manager/{managerId}")
-public ResponseEntity<ApiResponse<List<EmployeeResponse>>> getEmployeesByManager( @PathVariable Integer managerId) {
+    public ResponseEntity<ApiResponse<List<EmployeeResponse>>> getEmployeesByManager(@PathVariable Integer managerId) {
+        List<EmployeeResponse> employees = employeeService.getEmployeesByManager(managerId);
+        return ResponseEntity.ok(ApiResponse.success(employees));
+    }
 
-    List<EmployeeResponse> employees = employeeService.getEmployeesByManager(managerId);
-
-    return ResponseEntity.ok(ApiResponse.success(employees) );
-}
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<EmployeeResponse>> update(@PathVariable Integer id, @RequestBody EmployeeRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(employeeService.update(id, request)));
+    }
 }

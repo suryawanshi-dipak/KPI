@@ -124,8 +124,8 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
       if (["monthly", "weekly", "bi-weekly"].includes(newType)) {
         const defaults = getPreviousPeriodDefaults(newType);
         updated.measurement_period_label = defaults.periodLabel;
-        updated.period_start_date = defaults.defaultDate;
-        updated.period_end_date = defaults.defaultDate;
+        updated.period_start_date = defaults.defaultStartDate;
+        updated.period_end_date = defaults.defaultEndDate;
       }
       return updated;
     });
@@ -153,8 +153,8 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
             ...f,
             measurement_period_type: targetPeriodType,
             measurement_period_label: defaults.periodLabel,
-            period_start_date: defaults.defaultDate,
-            period_end_date: defaults.defaultDate,
+            period_start_date: defaults.defaultStartDate,
+            period_end_date: defaults.defaultEndDate,
           }));
         } else {
           setForm((f) => ({
@@ -436,14 +436,22 @@ function getWeekNumber(d) {
   return Math.ceil((((targetDate - yearStart) / 86400000) + 1) / 7);
 }
 
-// Helper to compute previous period label and default date based on frequency/periodType
+// Helper to compute previous period label and default start/end dates based on frequency/periodType
 function getPreviousPeriodDefaults(frequency) {
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth(); // 0-indexed
 
   let periodLabel = "";
-  let defaultDateStr = "";
+  let defaultStartDateStr = "";
+  let defaultEndDateStr = "";
+
+  const formatYYYYMMDD = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
 
   if (frequency === "monthly") {
     // Determine previous month relative to today
@@ -451,21 +459,28 @@ function getPreviousPeriodDefaults(frequency) {
     const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     periodLabel = `${months[prevMonthDate.getMonth()]}-${prevMonthDate.getFullYear()}`;
     
-    // Format YYYY-MM-DD
-    const y = prevMonthDate.getFullYear();
-    const m = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
-    const d = String(prevMonthDate.getDate()).padStart(2, "0");
-    defaultDateStr = `${y}-${m}-${d}`;
+    // Start date = 1st of that previous month
+    const startDate = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1);
+    defaultStartDateStr = formatYYYYMMDD(startDate);
+
+    // End date = last day of that previous month (0th day of the next month)
+    const endDate = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0);
+    defaultEndDateStr = formatYYYYMMDD(endDate);
   } else if (frequency === "weekly") {
     // Previous week relative to today (subtract 7 days)
     const prevWeekDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const weekNo = getWeekNumber(prevWeekDate);
     periodLabel = `WK${weekNo}`;
     
-    const y = prevWeekDate.getFullYear();
-    const m = String(prevWeekDate.getMonth() + 1).padStart(2, "0");
-    const d = String(prevWeekDate.getDate()).padStart(2, "0");
-    defaultDateStr = `${y}-${m}-${d}`;
+    // Find Monday of that previous week
+    const day = prevWeekDate.getDay();
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const startDate = new Date(prevWeekDate.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+    defaultStartDateStr = formatYYYYMMDD(startDate);
+
+    // End date = Friday of that previous week (Monday + 4 days)
+    const endDate = new Date(startDate.getTime() + 4 * 24 * 60 * 60 * 1000);
+    defaultEndDateStr = formatYYYYMMDD(endDate);
   } else if (frequency === "bi_weekly" || frequency === "bi-weekly") {
     // Previous bi-week relative to today (subtract 14 days)
     const prevBiWeekDate = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -481,11 +496,19 @@ function getPreviousPeriodDefaults(frequency) {
     }
     periodLabel = `WK${startW}-${endW}`;
     
-    const y = prevBiWeekDate.getFullYear();
-    const m = String(prevBiWeekDate.getMonth() + 1).padStart(2, "0");
-    const d = String(prevBiWeekDate.getDate()).padStart(2, "0");
-    defaultDateStr = `${y}-${m}-${d}`;
+    // Find Monday of the first week of the bi-week
+    const currentWeekNo = getWeekNumber(prevBiWeekDate);
+    const weekDiff = startW - currentWeekNo;
+    const baseDate = new Date(prevBiWeekDate.getTime() + weekDiff * 7 * 24 * 60 * 60 * 1000);
+    const day = baseDate.getDay();
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const startDate = new Date(baseDate.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+    defaultStartDateStr = formatYYYYMMDD(startDate);
+
+    // End date = Friday of the second week of the bi-week (Monday + 11 days)
+    const endDate = new Date(startDate.getTime() + 11 * 24 * 60 * 60 * 1000);
+    defaultEndDateStr = formatYYYYMMDD(endDate);
   }
 
-  return { periodLabel, defaultDate: defaultDateStr };
+  return { periodLabel, defaultStartDate: defaultStartDateStr, defaultEndDate: defaultEndDateStr };
 }

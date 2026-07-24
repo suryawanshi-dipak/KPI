@@ -1,5 +1,6 @@
 package com.kpi.service;
 
+import com.kpi.dto.request.EmployeeRequest;
 import com.kpi.dto.response.EmployeeResponse;
 
 import java.util.List;
@@ -10,5 +11,8 @@ public interface EmployeeService {
 
     EmployeeResponse getById(Integer id);
 
- List<EmployeeResponse> getEmployeesByManager(Integer managerId);
+    List<EmployeeResponse> getEmployeesByManager(Integer managerId);
+
+    // Update existing employee's details
+    EmployeeResponse update(Integer id, EmployeeRequest request);
 }

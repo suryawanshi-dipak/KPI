@@ -109,6 +109,7 @@ function submit(ev) {
     <option value="">Select Team...</option>
     <option value="Scrum">Scrum</option>
     <option value="Kanban">Kanban</option>
+    <option value="Intern">Intern</option>
   </select>
 </Field>
 

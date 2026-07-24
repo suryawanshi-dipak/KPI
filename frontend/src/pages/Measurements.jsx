@@ -49,7 +49,11 @@ export default function Measurements() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    setTimeout(() => {
+      load();
+    }, 0);
+  }, []); // eslint-disable-line
 
   const kpiName = (id) => kpis.find((k) => Number(k.id) === Number(id))?.name || "—";
 

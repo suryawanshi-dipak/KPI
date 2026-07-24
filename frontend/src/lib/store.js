@@ -704,10 +704,14 @@ export async function listEmployees() {
       // Normalize manager references to support both backend camelCase (managerId) and local seed snake_case (manager_id)
       managerId: b.managerId !== undefined && b.managerId !== null ? b.managerId : b.manager_id,
       manager_id: b.managerId !== undefined && b.managerId !== null ? b.managerId : b.manager_id,
-      status: "active",
+      employee_id: b.employeeId,
+      phone: b.phone,
+      joined_on: b.joinedOn,
+      gender: b.gender,
+      status: b.status || "active",
       is_deleted: false,
     }));
-    console.log(list);
+    console.log("listEmployees: ", list);
     db.employees = list;
     return list;
   } catch (err) {
@@ -780,20 +784,65 @@ export async function getEmployee(id) {
 
 
 export async function saveEmployee(payload) {
-  await delay();
+  const token = await getToken();
+  const headers = authHeaders(token);
+
   if (payload.id) {
-    const i = db.employees.findIndex((e) => Number(e.id) === Number(payload.id));
-    db.employees[i] = { ...db.employees[i], ...payload };
-    return clone(db.employees[i]);
+    // Construct request body with appropriate camelCase format matching backend EmployeeRequest
+    const body = {
+      employeeId: payload.employee_id,
+      email: payload.email,
+      name: payload.name,
+      role: payload.role,
+      department: payload.department,
+      designation: payload.designation,
+      managerId: payload.manager_id === "" ? null : Number(payload.manager_id),
+      phone: payload.phone,
+      joinedOn: payload.joined_on,
+      gender: payload.gender,
+      status: payload.status,
+    };
+
+    const res = await fetch(`${API_BASE}/employees/${payload.id}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || "Failed to update employee");
+    }
+
+    const json = await res.json();
+    const updated = json.data;
+    
+    // Map response back to frontend expectations
+    const item = {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      designation: updated.designation,
+      department: updated.department,
+      role: updated.role,
+      managerId: updated.managerId,
+      manager_id: updated.managerId,
+      employee_id: updated.employeeId,
+      phone: updated.phone,
+      joined_on: updated.joinedOn,
+      gender: updated.gender,
+      status: updated.status || "active",
+      is_deleted: false,
+    };
+
+    const idx = db.employees.findIndex((e) => Number(e.id) === Number(payload.id));
+    if (idx !== -1) {
+      db.employees[idx] = item;
+    }
+    return item;
+  } else {
+    throw new Error("Add employee is not supported from the frontend UI.");
   }
-  const rec = {
-    id: nextId("employees"),
-    status: "active",
-    created_at: new Date().toISOString(),
-    ...payload,
-  };
-  db.employees.push(rec);
-  return clone(rec);
 }
 
 /* ── ASSIGNMENTS ───────────────────────────────────────────── */

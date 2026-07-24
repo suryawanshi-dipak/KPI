@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
@@ -28,6 +28,7 @@ export default function Kpis() {
   const [toast, setToast] = useState(null);
   const [q, setQ] = useState("");
   const nav = useNavigate();
+  const location = useLocation();
 
   // Load KPI configuration, stats, assignments, employees and current logged in user in parallel
   const load = () =>
@@ -344,7 +345,16 @@ export default function Kpis() {
                             <Icon.measure />
                           </button>
                           {/* Eye / View Trend - visible to everyone */}
-                          <button className="icon-btn" title="View trend" onClick={() => nav(`/kpis/${k.id}`)}>
+                          <button
+                            className="icon-btn"
+                            title="View trend"
+                            onClick={() => {
+                              const selectedEmployeeId = (isManager || isAdmin) && managerFilter !== "all" && managerFilter !== "self"
+                                ? Number(managerFilter)
+                                : (isManager || isAdmin ? Number(currentUser.id) : Number(currentUser.id));
+                              nav(`/kpis/${k.id}${selectedEmployeeId ? `?viewUser=${selectedEmployeeId}` : ""}`);
+                            }}
+                          >
                             <Icon.eye />
                           </button>
                           {/* Administrative controls: only visible to managers and admins */}

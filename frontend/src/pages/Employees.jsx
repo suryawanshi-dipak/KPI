@@ -29,7 +29,6 @@ export default function Employees() {
     <Layout crumb={<><span>Administration</span> · <b>Employees</b></>}>
       <div className="page-head">
         <div><h1>Employees</h1><p>Team members, roles, and reporting lines.</p></div>
-        <button className="btn btn--primary" onClick={() => setEditing({})}><Icon.plus /> Add employee</button>
       </div>
 
       <div className="filter-bar">
