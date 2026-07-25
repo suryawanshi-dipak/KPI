@@ -67,6 +67,8 @@ export default function Dashboard() {
   const [trendKpi, setTrendKpi] = useState(null);
   const [yDomain, setYDomain] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  // Track total number of active KPIs in the system (same as appeared in KPI screen)
+  const [systemKpisCount, setSystemKpisCount] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -99,6 +101,8 @@ export default function Dashboard() {
         setViewOptions(options);
         setSelectedUserId(effectiveViewUserId);
         setAssignments(assignments);
+        // Store total active KPIs count from listKpis response
+        setSystemKpisCount(allKpis.length);
 
         const isAdminSelf = String(user.role).toLowerCase() === "admin" && Number(effectiveViewUserId) === Number(user.id);
         let allowedKpiIds = [];
@@ -206,7 +210,12 @@ async function loadMeasurements(kpi, userId, sourceMeasurements = [], activeUser
 
       const activeMs = visibleMs.filter(m => !visibleMs.some(other => Number(other.corrected_from_id) === Number(m.id)));
 
-      const filtered = activeMs
+      // Sort chronologically ascending (oldest to newest, left to right reading)
+      const sortedActiveMs = [...activeMs].sort((a, b) =>
+        String(a.period_start_date).localeCompare(String(b.period_start_date))
+      );
+
+      const filtered = sortedActiveMs
         .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
         // Added index key to guarantee unique keys on XAxis, resolving the Recharts duplicate key tooltip bug
         .map((m, i) => ({ index: i, period: m.measurement_period_label, value: Number(m.measured_value) }));
@@ -362,7 +371,7 @@ const pct = dashboardCounts.totalKpis
         <div>
           <h1>KPI overview</h1>
           <p>
-            Real-time RAG status across all {dashboardCounts.totalKpis} KPIs · FY2026-27
+            Real-time RAG status across all {isAggregatedView ? systemKpisCount : dashboardCounts.totalKpis} KPIs · FY2026-27
           </p>
         </div>
         {canViewByEmployee && (
@@ -386,12 +395,31 @@ const pct = dashboardCounts.totalKpis
 
       <div className="stat-grid">
         <div className="stat">
-          <div className="stat__label">Total KPI Assignments</div>
-          <div className="stat__value">
-            {dashboardCounts.totalKpis}
-          </div>
-          <div className="stat__sub">
-            {dashboardCounts.totalKras} KRA areas
+          <div className="stat__label">Overview</div>
+          <div style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            {/* KPI Assignments Count (per role/view context) */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>
+                {isAggregatedView ? "KPI Assignments:" : "Assigned KPIs:"}
+              </span>
+              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                {isAggregatedView ? assignments.length : dashboardCounts.totalKpis}
+              </span>
+            </div>
+            {/* Total Active KPIs Count (same as appeared in KPI screen) */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KPIs:</span>
+              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                {systemKpisCount}
+              </span>
+            </div>
+            {/* Total Active KRAs Count (same as appeared in KRA area tab) */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KRAs:</span>
+              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                {kras.length}
+              </span>
+            </div>
           </div>
         </div>
         <div className="stat stat--ok">

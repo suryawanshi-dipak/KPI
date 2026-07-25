@@ -103,7 +103,12 @@ export default function KpiDetail() {
     return !visibleMeasurements.some(other => Number(other.corrected_from_id) === Number(m.id));
   });
 
-  const chartData = activeMs
+  // Sort chronologically ascending (oldest to newest, left to right reading)
+  const sortedActiveMs = [...activeMs].sort((a, b) =>
+    String(a.period_start_date).localeCompare(String(b.period_start_date))
+  );
+
+  const chartData = sortedActiveMs
     .filter(m => !m.is_pending && m.measured_value !== null && m.measured_value !== undefined)
     // Added index key to guarantee unique keys on XAxis, resolving the Recharts duplicate key tooltip bug
     .map((m, i) => ({
@@ -112,7 +117,7 @@ export default function KpiDetail() {
       value: Number(m.measured_value)
     }));
 
-  const latest = activeMs[activeMs.length - 1];
+  const latest = sortedActiveMs[sortedActiveMs.length - 1];
 
   return (
     <Layout crumb={<><span onClick={()=>nav("/kpis")} style={{cursor:"pointer"}}>KPIs</span> · <b>{kpi.name}</b></>}>

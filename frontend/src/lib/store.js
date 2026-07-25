@@ -233,7 +233,8 @@ function mapMeasurementToFrontend(b) {
     kra_area_name: b.kraAreaName,
     kpi_metric_version: b.kpiMetricVersion,
     measured_value: b.measuredValue,
-    measurement_period_type: b.measurementPeriodType,
+    // Symmetrically map bi_weekly enum from backend to bi-weekly for frontend usage
+    measurement_period_type: b.measurementPeriodType === "bi_weekly" ? "bi-weekly" : b.measurementPeriodType,
     measurement_period_label: b.measurementPeriodLabel,
     period_start_date: b.periodStartDate,
     period_end_date: b.periodEndDate,
@@ -321,7 +322,8 @@ function mapMeasurementToBackend(f) {
   return {
     kpiMetricId: f.kpi_metric_id,
     measuredValue: f.measured_value,
-    measurementPeriodType: f.measurement_period_type,
+    // Symmetrically map bi-weekly from frontend to bi_weekly enum expected by backend
+    measurementPeriodType: f.measurement_period_type === "bi-weekly" ? "bi_weekly" : f.measurement_period_type,
     measurementPeriodLabel: f.measurement_period_label,
     periodStartDate: f.period_start_date,
     periodEndDate: f.period_end_date,

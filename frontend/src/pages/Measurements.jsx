@@ -60,39 +60,28 @@ export default function Measurements() {
   // 1. Role-based base visibility filtering
   let visibleMeasurements = [];
   if (currentUser) {
-    // Admin: can see all measurements of all employees + managers
+    // Admin: can see all measurements recorded by all employees/managers
     if (currentUser.role === "admin") {
       visibleMeasurements = allRows;
     }
-    // Employee: can see only measurements of KPIs assigned to them
+    // Employee: can see only measurements recorded by themselves (logged-in user)
     else if (currentUser.role === "employee") {
-      const myKpiIds = assignments
-        .filter((a) => Number(a.employee_id) === Number(currentUser.id))
-        .map((a) => Number(a.kpi_metric_id));
-
       visibleMeasurements = allRows.filter((m) =>
-        myKpiIds.includes(Number(m.kpi_metric_id))
+        Number(m.measured_by) === Number(currentUser.id)
       );
     }
-    // Manager: can see his own assigned measurements + team member measurements
+    // Manager: can see measurements recorded by themselves (manager) and their team members (direct reports)
     else if (currentUser.role === "manager") {
       // Get IDs of all team members managed by this manager
       const teamIds = employees
         .filter((e) => Number(e.managerId) === Number(currentUser.id))
         .map((e) => Number(e.id));
+      
+      // Include the manager's own ID
       const teamIdsWithSelf = [...teamIds, Number(currentUser.id)];
 
-      // Find all KPIs assigned to the team + manager
-      const teamKpis = new Set(
-        assignments
-          .filter((a) => teamIdsWithSelf.includes(Number(a.employee_id)))
-          .map((a) => Number(a.kpi_metric_id))
-      );
-
-      // Measurements are visible if:
-      // (a) KPI is assigned to manager/team OR (b) measurement was recorded by manager/team
+      // Filter: visible only if the measurement was recorded (measured_by) by the manager or a team member
       visibleMeasurements = allRows.filter((m) =>
-        teamKpis.has(Number(m.kpi_metric_id)) ||
         teamIdsWithSelf.includes(Number(m.measured_by))
       );
     }

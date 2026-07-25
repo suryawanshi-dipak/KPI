@@ -27,17 +27,25 @@ export function computeStatus({ value, direction, target, warn, critical }) {
   }
 
   if (higher) {
-    // higher is better: green ≥ target, amber ≥ warn, red below
+    // higher_better:
+    // - Green: value >= target (t)
+    // - Amber: warn_threshold (w) <= value < target (t)
+    // - Red: critical_threshold (c) <= value < warn_threshold (w)
+    // - Critical: value < critical_threshold (c)
     if (t !== null && v >= t) return "green";
     if (w !== null && v >= w) return "amber";
-    if (c !== null && v >= c) return "amber";
-    return "red";
+    if (c !== null && v >= c) return "red";
+    return "critical";
   } else {
-    // lower is better: green ≤ target, amber ≤ warn, red above
+    // lower_better:
+    // - Green: value <= target (t)
+    // - Amber: target (t) < value <= warn_threshold (w)
+    // - Red: warn_threshold (w) < value <= critical_threshold (c)
+    // - Critical: value > critical_threshold (c)
     if (t !== null && v <= t) return "green";
     if (w !== null && v <= w) return "amber";
-    if (c !== null && v <= c) return "amber";
-    return "red";
+    if (c !== null && v <= c) return "red";
+    return "critical";
   }
 }
 
