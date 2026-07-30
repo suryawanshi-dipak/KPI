@@ -5,7 +5,7 @@ import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KpiForm from "../forms/KpiForm";
 import MeasurementForm from "../forms/MeasurementForm";
-import { listKpis, saveKpi, getStats, kraName, saveMeasurement , employeeName , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser } from "../lib/store";
+import { listKpis, saveKpi, getStats, kraName, saveMeasurement , employeeName , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser, listMeasurements } from "../lib/store";
 import KpiAssignmentForm from "../forms/KpiAssignmentForm";
 
 export default function Kpis() {
@@ -23,6 +23,8 @@ export default function Kpis() {
   const [employees, setEmployees] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [managerFilter, setManagerFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [measurements, setMeasurements] = useState([]);
 
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [toast, setToast] = useState(null);
@@ -37,14 +39,16 @@ export default function Kpis() {
       getStats(),
       listAssignments(),
       listEmployees(),
-      getCurrentUser()
+      getCurrentUser(),
+      listMeasurements()
     ])
-      .then(([k, s, a, e, user]) => {
+      .then(([k, s, a, e, user, m]) => {
         setKpis(k);
         setStats(s);
         setAssignments(a);
         setEmployees(e);
         setCurrentUser(user);
+        setMeasurements(m);
       })
       .catch((err) => {
         console.error("Error loading KPI configuration data:", err);
@@ -99,10 +103,28 @@ export default function Kpis() {
     }
   }
 
+  // Handles saving assignment updates (for a single employee) or new assignments (for multiple employees)
   async function handleAssignmentSave(payload) {
     setSaving(true);
     try {
-      await saveAssignment(payload);
+      // Check if saving multiple assignments at once (payload.employee_ids is an array of IDs)
+      if (payload.employee_ids && Array.isArray(payload.employee_ids)) {
+        await Promise.all(
+          payload.employee_ids.map((empId) =>
+            saveAssignment({
+              kpi_metric_id: payload.kpi_metric_id,
+              employee_id: empId,
+              team: payload.team,
+              is_primary: payload.is_primary,
+              assigned_from: payload.assigned_from,
+              assigned_to: payload.assigned_to,
+            })
+          )
+        );
+      } else {
+        // Otherwise, save a single updated or newly created assignment
+        await saveAssignment(payload);
+      }
       setAssigning(null);
       setEditingAssignment(null);
       if (viewAssignments) {
@@ -111,7 +133,7 @@ export default function Kpis() {
       }
       const updatedAssignments = await listAssignments();
       setAssignments(updatedAssignments);
-      flash(payload.id ? "Assignment updated" : "Assignment created");
+      flash(payload.id ? "Assignment updated" : "Assignments created");
     } catch (err) {
       console.error(err);
       flash(err.message || "Failed to save assignment");
@@ -153,13 +175,31 @@ export default function Kpis() {
   let baseKpis = kpis;
 
   if (isEmployee) {
-    // 1) For Employees: visible ONLY those KPIs assigned to them
+    // 1) For Employees: visible KPIs assigned to them OR Team KPIs assigned to their team(s)
+    const myTeams = new Set(
+      assignments
+        .filter((a) => Number(a.employee_id) === Number(currentUser.id))
+        .map((a) => a.team)
+        .filter(Boolean)
+    );
+
     const myKpiIds = new Set(
       assignments
         .filter((a) => Number(a.employee_id) === Number(currentUser.id))
         .map((a) => Number(a.kpi_metric_id))
     );
-    baseKpis = kpis.filter((k) => myKpiIds.has(Number(k.id)));
+
+    baseKpis = kpis.filter((k) => {
+      if (myKpiIds.has(Number(k.id))) return true;
+
+      // If it is a Team KPI and assigned to any team the employee belongs to
+      if (k.is_team_kpi === 1 || k.is_team_kpi === true) {
+        return assignments.some(
+          (a) => Number(a.kpi_metric_id) === Number(k.id) && myTeams.has(a.team)
+        );
+      }
+      return false;
+    });
   } else if (isManager || isAdmin) {
     // 2) For Managers & Admins: show all KPIs by default
     baseKpis = kpis;
@@ -173,6 +213,12 @@ export default function Kpis() {
       );
       // Filter KPIs: show KPIs assigned to self OR created by self
       baseKpis = kpis.filter((k) => myKpiIds.has(Number(k.id)) || Number(k.created_by) === Number(currentUser.id));
+    } else if (managerFilter === "unassigned") {
+      // Show KPIs that have no assignments at all
+      const assignedKpiIds = new Set(
+        assignments.map((a) => Number(a.kpi_metric_id))
+      );
+      baseKpis = kpis.filter((k) => !assignedKpiIds.has(Number(k.id)));
     } else if (managerFilter !== "all") {
       const selectedMemberId = Number(managerFilter);
       const selectedMember = employees.find(e => Number(e.id) === selectedMemberId);
@@ -192,11 +238,18 @@ export default function Kpis() {
     }
   }
 
-  // Filter list by search query
-  const filtered = baseKpis.filter((k) =>
-    k.name.toLowerCase().includes(q.toLowerCase()) ||
-    kraName(k.kra_area_id).toLowerCase().includes(q.toLowerCase())
-  );
+  // Filter list by search query and KPI active status
+  const filtered = baseKpis.filter((k) => {
+    const matchesSearch = k.name.toLowerCase().includes(q.toLowerCase()) ||
+      kraName(k.kra_area_id).toLowerCase().includes(q.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter === "active" && k.is_active !== 1 && k.is_active !== true) return false;
+    if (statusFilter === "inactive" && k.is_active !== 0 && k.is_active !== false) return false;
+
+    return true;
+  });
 
   // For managers/admins, show self-created KPIs first, then the rest.
   // This keeps the current user’s own KPIs at the top of the list.
@@ -211,6 +264,18 @@ export default function Kpis() {
       return a.name.localeCompare(b.name);
     });
   }
+
+  // Get the latest status of a KPI specifically recorded for a given employee
+  const getLatestStatusForEmployee = (kpiId, empId) => {
+    if (!measurements) return "unknown";
+    const kpiMs = measurements.filter(m => Number(m.kpi_metric_id) === Number(kpiId) && Number(m.measured_by) === Number(empId) && !m.is_deleted);
+    if (kpiMs.length === 0) return "unknown";
+    const sorted = [...kpiMs].sort((a, b) => String(b.period_start_date).localeCompare(String(a.period_start_date)));
+    return sorted[0].status;
+  };
+
+  // Status column is shown to employees by default, and to managers/admins only when a specific employee filter is selected
+  const showStatusColumn = isEmployee || (managerFilter !== "all");
 
   return (
     <Layout crumb={<><span>Configuration</span> · <b>KPIs</b></>}>
@@ -231,6 +296,23 @@ export default function Kpis() {
         <div className="search">
           <Icon.search />
           <input placeholder="Search KPIs or KRA areas…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+
+        {/* Filter by KPI status select dropdown */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
+            Filter by KPI:
+          </span>
+          <select
+            className="select"
+            style={{ width: "auto", minWidth: "130px", padding: "0.45rem 0.6rem" }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">Show All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Not Active</option>
+          </select>
         </div>
         
         {/* Manager/Admin KPI assignments filter dropdown */}
@@ -284,7 +366,7 @@ export default function Kpis() {
                 <th>Target</th>
                 <th>Direction</th>
                 <th>Frequency</th>
-                <th>Latest status</th>
+                {showStatusColumn && <th>Latest status</th>}
                 <th>Created By</th>
                 <th>Actions</th>
 
@@ -335,46 +417,110 @@ export default function Kpis() {
                     </td>
                     <td className="cell-sub">{k.direction === "higher_better" ? "Higher ↑" : "Lower ↓"}</td>
                     <td className="cell-sub">{cap(k.frequency)}</td>
-                    <td><StatusPill status={m?.status || "unknown"} /></td>
+                    {showStatusColumn && (
+                      <td>
+                        <StatusPill status={
+                          isEmployee 
+                            ? getLatestStatusForEmployee(k.id, currentUser.id)
+                            : getLatestStatusForEmployee(k.id, managerFilter === "self" ? currentUser.id : Number(managerFilter))
+                        } />
+                      </td>
+                    )}
                     <td className="cell-sub">{employeeName(k.created_by)}</td>
                     <td>
-                      {isKpiAccessible ? (
-                        <div className="cell-actions">
-                          {/* Ruler / Add Measurement - visible to everyone */}
-                          <button className="icon-btn" title="Enter measurement" onClick={() => setMeasuring(k)}>
-                            <Icon.measure />
-                          </button>
-                          {/* Eye / View Trend - visible to everyone */}
-                          <button
-                            className="icon-btn"
-                            title="View trend"
-                            onClick={() => {
-                              const selectedEmployeeId = (isManager || isAdmin) && managerFilter !== "all" && managerFilter !== "self"
-                                ? Number(managerFilter)
-                                : (isManager || isAdmin ? Number(currentUser.id) : Number(currentUser.id));
-                              nav(`/kpis/${k.id}${selectedEmployeeId ? `?viewUser=${selectedEmployeeId}` : ""}`);
-                            }}
-                          >
-                            <Icon.eye />
-                          </button>
-                          {/* Administrative controls: only visible to managers and admins */}
-                          {(isAdmin || isManager) && (
+                      <div className="cell-actions">
+                        {isKpiAccessible ? (
+                          <>
+                            {/* Ruler / Add Measurement - visible to admins, managers, or directly assigned employees */}
+                            {(isAdmin || isManager || assignments.some(a => Number(a.kpi_metric_id) === Number(k.id) && Number(a.employee_id) === Number(currentUser.id))) && (
+                              <button className="icon-btn" title="Enter measurement" onClick={() => setMeasuring(k)}>
+                                <Icon.measure />
+                              </button>
+                            )}
+                            {/* Eye / View Trend - visible to everyone */}
+                            <button
+                              className="icon-btn"
+                              title="View trend"
+                              onClick={() => {
+                                const isDirectlyAssigned = assignments.some(a => Number(a.kpi_metric_id) === Number(k.id) && Number(a.employee_id) === Number(currentUser.id));
+                                const isTeamKpi = k.is_team_kpi === 1 || k.is_team_kpi === true;
+                                const teamAssignment = isTeamKpi ? assignments.find(a => Number(a.kpi_metric_id) === Number(k.id)) : null;
+
+                                const assignedEmployeeIds = assignments
+                                  .filter(a => Number(a.kpi_metric_id) === Number(k.id))
+                                  .map(a => Number(a.employee_id));
+
+                                let selectedEmployeeId = currentUser.id;
+                                if (isManager || isAdmin) {
+                                  if (managerFilter !== "all" && managerFilter !== "self" && assignedEmployeeIds.includes(Number(managerFilter))) {
+                                    selectedEmployeeId = Number(managerFilter);
+                                  } else if (assignedEmployeeIds.includes(Number(currentUser.id))) {
+                                    selectedEmployeeId = Number(currentUser.id);
+                                  } else if (assignedEmployeeIds.length > 0) {
+                                    selectedEmployeeId = assignedEmployeeIds[0];
+                                  }
+                                } else if (isTeamKpi && !isDirectlyAssigned && teamAssignment) {
+                                  selectedEmployeeId = teamAssignment.employee_id;
+                                }
+
+                                nav(`/kpis/${k.id}?viewUser=${selectedEmployeeId}`);
+                              }}
+                            >
+                              <Icon.eye />
+                            </button>
+                            {/* Administrative controls: only visible to managers and admins */}
+                            {(isAdmin || isManager) && (
+                              <>
+                                <button className="icon-btn" title="Edit" onClick={() => setEditing(k)}>
+                                  <Icon.edit />
+                                </button>
+                                <button className="icon-btn" title="Make a Copy" onClick={() => setEditing({ ...k, id: undefined, isCopy: true, name: `${k.name} (Copy)` })}>
+                                  <Icon.copy />
+                                </button>
+                                <button className="icon-btn" title="Assign employees" onClick={() => setAssigning(k)}>
+                                  <Icon.plus />
+                                </button>
+                                <button className="icon-btn" title="Delete KPI" onClick={() => handleDelete(k.id)} style={{ color: "var(--bad)" }}>
+                                  <Icon.trash />                                  
+                                </button>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          // If KPI is not accessible but user is manager or admin, show View Trend and Make a Copy button
+                          (isManager || isAdmin) ? (
                             <>
-                              <button className="icon-btn" title="Edit" onClick={() => setEditing(k)}>
-                                <Icon.edit />
+                              <button
+                                className="icon-btn"
+                                title="View trend"
+                                onClick={() => {
+                                  const assignedEmployeeIds = assignments
+                                    .filter(a => Number(a.kpi_metric_id) === Number(k.id))
+                                    .map(a => Number(a.employee_id));
+
+                                  let selectedEmployeeId = currentUser.id;
+                                  if (managerFilter !== "all" && managerFilter !== "self" && assignedEmployeeIds.includes(Number(managerFilter))) {
+                                    selectedEmployeeId = Number(managerFilter);
+                                  } else if (assignedEmployeeIds.includes(Number(currentUser.id))) {
+                                    selectedEmployeeId = Number(currentUser.id);
+                                  } else if (assignedEmployeeIds.length > 0) {
+                                    selectedEmployeeId = assignedEmployeeIds[0];
+                                  }
+
+                                  nav(`/kpis/${k.id}?viewUser=${selectedEmployeeId}`);
+                                }}
+                              >
+                                <Icon.eye />
                               </button>
-                              <button className="icon-btn" title="Assign employees" onClick={() => setAssigning(k)}>
-                                <Icon.plus />
-                              </button>
-                              <button className="icon-btn" title="Delete KPI" onClick={() => handleDelete(k.id)} style={{ color: "var(--bad)" }}>
-                                <Icon.trash />                                  
+                              <button className="icon-btn" title="Make a Copy" onClick={() => setEditing({ ...k, id: undefined, isCopy: true, name: `${k.name} (Copy)` })}>
+                                <Icon.copy />
                               </button>
                             </>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
-                      )}
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--muted)" }}>—</div>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -386,10 +532,10 @@ export default function Kpis() {
 
       {editing && (
         <Modal
-          title={editing.id ? "Edit KPI" : "New KPI"}
-          subtitle={editing.id ? editing.name : "Define a new key performance indicator"}
+          title={editing.id ? "Edit KPI" : (editing.isCopy ? "Copy KPI" : "New KPI")}
+          subtitle={editing.id ? editing.name : (editing.isCopy ? `Copy of ${editing.name.replace(" (Copy)", "")}` : "Define a new key performance indicator")}
           onClose={() => setEditing(null)} wide>
-          <KpiForm initial={editing.id ? editing : null} saving={saving}
+          <KpiForm initial={editing.id ? editing : (editing.isCopy ? editing : null)} kpis={kpis} isCopy={editing.isCopy} saving={saving}
             onSubmit={handleSave} onCancel={() => setEditing(null)} />
         </Modal>
       )}
@@ -417,6 +563,7 @@ export default function Kpis() {
       onSubmit={handleAssignmentSave}
       onCancel={() => setAssigning(null)}
       assignments={assignments} // Pass current assignments for duplicate validation
+      isTeamKpi={assigning.is_team_kpi === 1 || assigning.is_team_kpi === true}
     />
   </Modal>
 )}

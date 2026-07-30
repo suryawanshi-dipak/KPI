@@ -272,43 +272,53 @@ let dashboardCounts = {
 };
 
 if (isAggregatedView) {
-  assignments.forEach(a => {
+  // Sum of assignments for all active/visible KPIs on the KPI screen
+  const activeAssignments = assignments.filter(a => visibleKpis.some(k => Number(k.id) === Number(a.kpi_metric_id)));
+  
+  activeAssignments.forEach(a => {
     const kpi = visibleKpis.find(k => Number(k.id) === Number(a.kpi_metric_id));
     if (!kpi) return;
 
-    // Find all measurements for this assignment
+    // Find all measurements recorded by the assigned employee for this KPI
     const msForAssign = (measurements || []).filter(m =>
       Number(m.kpi_metric_id) === Number(a.kpi_metric_id) &&
       Number(m.measured_by) === Number(a.employee_id) &&
       !m.is_deleted
     );
 
-    // Filter out superseded
+    // Filter out superseded measurements (i.e. those corrected by a newer record)
     const activeMs = msForAssign.filter(m =>
       !msForAssign.some(other => Number(other.corrected_from_id) === Number(m.id))
     );
 
-    // Sort by period_start_date descending to get latest
+    // Get the latest measurement by sorting by period start date descending
     const latestM = activeMs.sort((x, y) => String(y.period_start_date).localeCompare(String(x.period_start_date)))[0];
 
     let status = "unknown";
     if (latestM) {
-      dashboardCounts.measured++;
       status = latestM.status;
-      if (status === "green") dashboardCounts.green++;
-      else if (status === "amber") dashboardCounts.amber++;
-      else if (status === "red" || status === "critical") dashboardCounts.red++;
+      
+      // Ignore measurements that are pending or have unknown status from the dashboard roll-ups
+      if (!latestM.is_pending && status !== "unknown") {
+        dashboardCounts.measured++;
+        if (status === "green") dashboardCounts.green++;
+        else if (status === "amber") dashboardCounts.amber++;
+        else if (status === "red" || status === "critical") dashboardCounts.red++;
+      }
     }
 
-    // Aggregate KRA health
+    // Aggregate KRA health (ignore pending/unknown statuses)
     const kraId = kpi.kra_area_id;
     if (!kraLatestMap[kraId]) {
       kraLatestMap[kraId] = { green: 0, amber: 0, red: 0, total: 0 };
     }
-    kraLatestMap[kraId].total++;
-    if (status === "green") kraLatestMap[kraId].green++;
-    else if (status === "amber") kraLatestMap[kraId].amber++;
-    else if (status === "red" || status === "critical") kraLatestMap[kraId].red++;
+    
+    if (latestM && !latestM.is_pending && status !== "unknown") {
+      kraLatestMap[kraId].total++;
+      if (status === "green") kraLatestMap[kraId].green++;
+      else if (status === "amber") kraLatestMap[kraId].amber++;
+      else if (status === "red" || status === "critical") kraLatestMap[kraId].red++;
+    }
 
     aggregatedLatest.push({
       assignment: a,
@@ -317,32 +327,43 @@ if (isAggregatedView) {
     });
   });
 
-  dashboardCounts.totalKpis = assignments.length;
-  dashboardCounts.totalKras = new Set(assignments.map(a => Number(a.kra_area_id))).size;
+  // Calculate total active KPI assignments and active KRAs for Admin aggregated view
+  dashboardCounts.totalKpis = activeAssignments.length;
+  dashboardCounts.totalKras = new Set(activeAssignments.map(a => Number(a.kra_area_id))).size;
 
 } else {
+  // Non-aggregated view (Employee / Manager, or individual employee view)
   const userMeasurements = (measurements || []).filter((m) => {
     if (!viewUserId) return false;
     return Number(m.measured_by) === Number(viewUserId);
   });
 
-  userMeasurements
-    .filter((m) => !m.is_deleted)
-    .forEach((m) => {
-      const kpiId = m.kpi_metric_id;
-      if (!dashboardLatestByKpi[kpiId] || String(m.period_start_date) > String(dashboardLatestByKpi[kpiId].period_start_date)) {
-        dashboardLatestByKpi[kpiId] = m;
-      }
-    });
+  // Filter out superseded/corrected measurements first
+  const activeUserMeasurements = userMeasurements.filter(m =>
+    !m.is_deleted &&
+    !userMeasurements.some(other => Number(other.corrected_from_id) === Number(m.id))
+  );
+
+  // Determine latest measurement per KPI metric
+  activeUserMeasurements.forEach((m) => {
+    const kpiId = m.kpi_metric_id;
+    if (!dashboardLatestByKpi[kpiId] || String(m.period_start_date) > String(dashboardLatestByKpi[kpiId].period_start_date)) {
+      dashboardLatestByKpi[kpiId] = m;
+    }
+  });
 
   dashboardCounts.totalKpis = visibleKpis.length;
   dashboardCounts.totalKras = new Set(
     visibleKpis.map(k => Number(k.kra_area_id))
   ).size;
 
+  // Evaluate roll-up statuses for each assigned KPI
   visibleKpis.forEach((k) => {
     const m = dashboardLatestByKpi[k.id];
     if (!m) return;
+
+    // Ignore measurements that are pending or have unknown status from dashboard measured calculations
+    if (m.is_pending || m.status === "unknown") return;
 
     dashboardCounts.measured++;
 

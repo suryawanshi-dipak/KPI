@@ -16,25 +16,24 @@ function buildViewOptions(currentUser, employeesList, assignmentsList, kpiId) {
     .filter((a) => Number(a.kpi_metric_id) === Number(kpiId))
     .map((a) => Number(a.employee_id));
 
-  if (String(currentUser.role).toLowerCase() === "manager") {
-    if (assignedEmployeeIds.includes(Number(currentUser.id))) {
-      options.push({ id: Number(currentUser.id), name: currentUser.name || "Me", role: currentUser.role });
-    }
-    const reports = employeesList.filter((employee) => Number(employee.managerId) === Number(currentUser.id));
-    reports.forEach((employee) => {
-      if (assignedEmployeeIds.includes(Number(employee.id))) {
-        if (!options.some((option) => Number(option.id) === Number(employee.id))) {
-          options.push({ id: Number(employee.id), name: employee.name, role: employee.role });
-        }
-      }
-    });
-  } else if (String(currentUser.role).toLowerCase() === "admin") {
+  const roleLower = String(currentUser.role).toLowerCase();
+
+  if (roleLower === "manager" || roleLower === "admin") {
     employeesList.forEach((employee) => {
       if (assignedEmployeeIds.includes(Number(employee.id))) {
         const isSelf = Number(employee.id) === Number(currentUser.id);
+        const isReport = Number(employee.managerId) === Number(currentUser.id);
+        
+        let label = employee.name;
+        if (isSelf) {
+          label += roleLower === "admin" ? " (Admin/Me)" : " (Me)";
+        } else if (isReport) {
+          label += " (Report)";
+        }
+
         options.push({
           id: Number(employee.id),
-          name: isSelf ? `${employee.name || "Me"} (Admin)` : employee.name,
+          name: label,
           role: employee.role
         });
       }
@@ -60,6 +59,7 @@ export default function KpiDetail() {
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [assignments, setAssignments] = useState([]);
 
   const load = async () => {
     const [kpiData, measurementsData, user, employeesList, assignmentsList] = await Promise.all([
@@ -74,16 +74,32 @@ export default function KpiDetail() {
     const params = new URLSearchParams(location.search);
     const requestedUserId = Number(params.get("viewUser"));
     const canSelectUser = user && ["manager", "admin"].includes(String(user.role).toLowerCase());
+
+    // Resolve if this is a Team KPI and the logged-in user is a member of the same team
+    const isTeamKpi = kpiData && (kpiData.is_team_kpi === 1 || kpiData.is_team_kpi === true);
+    const teamKpiAssignee = isTeamKpi
+      ? assignmentsList.find((a) => Number(a.kpi_metric_id) === Number(kpiData.id))
+      : null;
+    const myTeams = new Set(
+      assignmentsList
+        .filter((a) => Number(a.employee_id) === Number(user?.id))
+        .map((a) => a.team)
+        .filter(Boolean)
+    );
+    const isTeamMember = isTeamKpi && teamKpiAssignee && myTeams.has(teamKpiAssignee.team);
+
+    // If a team member (and not manager/admin), default to viewing the assignee's measurements
     const defaultUserId = canSelectUser
       ? (options.some((option) => Number(option.id) === Number(requestedUserId))
           ? Number(requestedUserId)
           : (options.find((option) => Number(option.id) === Number(selectedUserId))?.id ?? options[0]?.id ?? user.id))
-      : Number(user.id);
+      : (isTeamMember && teamKpiAssignee ? Number(teamKpiAssignee.employee_id) : Number(user.id));
 
     setKpi(kpiData);
     setMs(measurementsData);
     setCurrentUser(user);
     setViewOptions(options);
+    setAssignments(assignmentsList);
     setSelectedUserId(defaultUserId);
   };
   useEffect(() => { load(); }, [id, location.search]);
@@ -93,7 +109,13 @@ export default function KpiDetail() {
   if (!kpi) return <Layout crumb={<b>KPI</b>}><Spinner /></Layout>;
 
   const canSelectUser = currentUser && ["manager", "admin"].includes(String(currentUser.role).toLowerCase());
+  
+  const isDirectlyAssigned = assignments.some(
+    (a) => Number(a.kpi_metric_id) === Number(id) && Number(a.employee_id) === Number(currentUser?.id)
+  );
+
   const effectiveUserId = selectedUserId ?? currentUser?.id ?? null;
+
   const visibleMeasurements = effectiveUserId
     ? ms.filter((measurement) => Number(measurement.measured_by) === Number(effectiveUserId))
     : ms;
@@ -144,9 +166,11 @@ export default function KpiDetail() {
               </select>
             </div>
           )}
-          <button className="btn btn--primary" style={{ alignSelf: "flex-end", height: 42 }} onClick={()=>setAdding(true)}>
-            <Icon.measure /> Enter measurement
-          </button>
+          {(currentUser && (currentUser.role === "admin" || currentUser.role === "manager" || isDirectlyAssigned)) && (
+            <button className="btn btn--primary" style={{ alignSelf: "flex-end", height: 42 }} onClick={()=>setAdding(true)}>
+              <Icon.measure /> Enter measurement
+            </button>
+          )}
         </div>
       </div>
 

@@ -85,6 +85,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
                 .sourceReference(request.getSourceReference())
                 .measurementInstruction(request.getMeasurementInstruction())
                 .isActive(request.getIsActive())
+                .isTeamKpi(request.getIsTeamKpi() != null ? request.getIsTeamKpi() : false)
                 .createdBy(getCurrentUserEmployeeId())
                 .updatedBy(getCurrentUserEmployeeId())
                 .build();
@@ -117,6 +118,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
         metric.setSourceReference(request.getSourceReference());
         metric.setMeasurementInstruction(request.getMeasurementInstruction());
         metric.setIsActive(request.getIsActive());
+        metric.setIsTeamKpi(request.getIsTeamKpi() != null ? request.getIsTeamKpi() : false);
         metric.setUpdatedBy(getCurrentUserEmployeeId());
 
         metric = kpiMetricRepository.save(metric);
@@ -157,6 +159,7 @@ public class KpiMetricServiceImpl implements KpiMetricService {
                 .sourceReference(metric.getSourceReference())
                 .measurementInstruction(metric.getMeasurementInstruction())
                 .isActive(metric.getIsActive())
+                .isTeamKpi(metric.getIsTeamKpi())
                 .version(metric.getVersion())
                 .createdAt(metric.getCreatedAt())
                 .updatedAt(metric.getUpdatedAt())

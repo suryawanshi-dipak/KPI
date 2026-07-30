@@ -3,7 +3,8 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
-import {listMeasurements, listKpis , saveMeasurement, deleteMeasurement, employeeName, getCurrentUser , listEmployees , listAssignments} from "../lib/store";
+// Added listKras and kraName imports to handle KRA area filtering
+import {listMeasurements, listKpis, listKras, kraName, saveMeasurement, deleteMeasurement, employeeName, getCurrentUser, listEmployees, listAssignments} from "../lib/store";
 
 export default function Measurements() {
   const [rows, setRows] = useState(null); // Used to verify if data has loaded (non-null means loaded)
@@ -12,6 +13,9 @@ export default function Measurements() {
   const [currentUser, setCurrentUser] = useState(null); // Currently logged in user
   const [kpis, setKpis] = useState([]); // All KPIs
   const [assignments, setAssignments] = useState([]); // All KPI assignments
+  // Cached list of KRA areas and selected KRA filter state
+  const [kras, setKras] = useState([]);
+  const [kraFilter, setKraFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all"); // State for manager/admin filter dropdown
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -21,7 +25,7 @@ export default function Measurements() {
 
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
 
-  // Retrieve current user and all reference datasets from backend
+  // Retrieve current user and all reference datasets (including KRA Areas) from backend
   const load = async () => {
     try {
       const user = await getCurrentUser();
@@ -29,12 +33,14 @@ export default function Measurements() {
         measurements,
         kpisData,
         assignmentsData,
-        employeesList
+        employeesList,
+        krasData // Fetch all active KRA Areas
       ] = await Promise.all([
         listMeasurements(),
         listKpis(),
         listAssignments(),
-        listEmployees()
+        listEmployees(),
+        listKras()
       ]);
 
       setCurrentUser(user);
@@ -42,6 +48,7 @@ export default function Measurements() {
       setAssignments(assignmentsData);
       setAllRows(measurements);
       setKpis(kpisData);
+      setKras(krasData); // Store KRA list in local state for filtering
       setRows(measurements); // Mark loading complete
     } catch (err) {
       console.error("Error loading measurements page data:", err);
@@ -64,11 +71,29 @@ export default function Measurements() {
     if (currentUser.role === "admin") {
       visibleMeasurements = allRows;
     }
-    // Employee: can see only measurements recorded by themselves (logged-in user)
+    // Employee: can see only measurements recorded by themselves (logged-in user) OR measurements for Team KPIs where they are a team member
     else if (currentUser.role === "employee") {
-      visibleMeasurements = allRows.filter((m) =>
-        Number(m.measured_by) === Number(currentUser.id)
+      const myTeams = new Set(
+        assignments
+          .filter((a) => Number(a.employee_id) === Number(currentUser.id))
+          .map((a) => a.team)
+          .filter(Boolean)
       );
+
+      visibleMeasurements = allRows.filter((m) => {
+        // Direct measurements recorded by the user
+        if (Number(m.measured_by) === Number(currentUser.id)) return true;
+
+        // Team KPI measurements for teams they belong to
+        const kpi = kpis.find((k) => Number(k.id) === Number(m.kpi_metric_id));
+        if (kpi && (kpi.is_team_kpi === 1 || kpi.is_team_kpi === true)) {
+          return assignments.some(
+            (a) => Number(a.kpi_metric_id) === Number(kpi.id) && myTeams.has(a.team)
+          );
+        }
+
+        return false;
+      });
     }
     // Manager: can see measurements recorded by themselves (manager) and their team members (direct reports)
     else if (currentUser.role === "manager") {
@@ -108,11 +133,22 @@ export default function Measurements() {
     (a, b) => String(b.period_start_date).localeCompare(String(a.period_start_date))
   );
 
-  // 3. Search query filter (by KPI name or period label)
-  const filtered = baseFiltered.filter((m) =>
-    kpiName(m.kpi_metric_id).toLowerCase().includes(q.toLowerCase()) ||
-    String(m.measurement_period_label).toLowerCase().includes(q.toLowerCase())
-  );
+  // 3. Search query and KRA Area filtering (by KPI name, period label, or selected KRA area)
+  const filtered = baseFiltered.filter((m) => {
+    const kpi = kpis.find((k) => Number(k.id) === Number(m.kpi_metric_id));
+    if (!kpi) return false;
+
+    // Filter by KRA area if a specific KRA is selected
+    if (kraFilter !== "all" && Number(kpi.kra_area_id) !== Number(kraFilter)) {
+      return false;
+    }
+
+    // Check if matching the search keyword (KPI name or period label)
+    const matchesSearch = kpi.name.toLowerCase().includes(q.toLowerCase()) ||
+      String(m.measurement_period_label).toLowerCase().includes(q.toLowerCase());
+
+    return matchesSearch;
+  });
   
   
   async function handleSave(p) {
@@ -186,6 +222,26 @@ async function handleDelete(id) {
           <input placeholder="Search by KPI or period…" value={q} onChange={(e)=>setQ(e.target.value)} />
         </div>
         
+        {/* KRA Area filter dropdown */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
+            Filter by KRA:
+          </span>
+          <select
+            className="select"
+            style={{ width: "auto", minWidth: "160px", padding: "0.45rem 0.6rem" }}
+            value={kraFilter}
+            onChange={(e) => setKraFilter(e.target.value)}
+          >
+            <option value="all">All KRAs</option>
+            {kras.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.area_name}
+              </option>
+            ))}
+          </select>
+        </div>
+        
         {/* Manager & Admin filter dropdown to filter measurements by employee */}
         {currentUser && (currentUser.role === "manager" || currentUser.role === "admin") && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -252,7 +308,20 @@ async function handleDelete(id) {
                   <td className="mono">{m.is_pending ? "—" : m.measured_value}</td>
                   <td><StatusPill status={m.status} /></td>
                   <td className="cell-sub">{employeeName(m.measured_by)}</td>
-                  <td className="cell-sub" style={{ maxWidth: 260 }}>{m.is_pending ? `Pending: ${m.pending_reason||""}` : (m.measurement_note || "—")}</td>
+                  <td className="cell-sub" style={{ maxWidth: 260 }}>
+                    {/* Constrain height of measurement note column with a scrollbar and title tooltip to keep rows standardized */}
+                    <div
+                      title={m.is_pending ? `Pending: ${m.pending_reason||""}` : (m.measurement_note || "")}
+                      style={{
+                        maxHeight: "42px",
+                        overflowY: "auto",
+                        wordBreak: "break-word",
+                        lineHeight: "1.4"
+                      }}
+                    >
+                      {m.is_pending ? `Pending: ${m.pending_reason||""}` : (m.measurement_note || "—")}
+                    </div>
+                  </td>
                   <td>
                     <div className="cell-actions">
                       {/* 

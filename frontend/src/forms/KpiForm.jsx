@@ -16,9 +16,10 @@ const BLANK = {
   source_reference: "",
   measurement_instruction: "",
   is_active: 1,
+  is_team_kpi: 0,
 };
 
-export default function KpiForm({ initial, onSubmit, onCancel, saving }) {
+export default function KpiForm({ initial, onSubmit, onCancel, saving, kpis = [], isCopy = false }) {
   const [form, setForm] = useState({ ...BLANK, ...initial });
   const [errors, setErrors] = useState({});
   const [kras, setKras] = useState([]);
@@ -33,7 +34,13 @@ export default function KpiForm({ initial, onSubmit, onCancel, saving }) {
 
   function validate() {
     const e = {};
-    if (!form.name.trim()) e.name = "KPI name is required.";
+    if (!form.name.trim()) {
+      e.name = "KPI name is required.";
+    } else if (isCopy && form.name.trim().toLowerCase() === initial?.name?.trim()?.toLowerCase()) {
+      e.name = "Duplicate KPI must have a different name from the original.";
+    } else if (kpis && kpis.some(k => k.name.trim().toLowerCase() === form.name.trim().toLowerCase() && Number(k.id) !== Number(initial?.id))) {
+      e.name = "A KPI with this name already exists.";
+    }
     if (!form.kra_area_id) e.kra_area_id = "Pick the KRA area this belongs to.";
     if (form.target_value === "" || isNaN(Number(form.target_value)))
       e.target_value = "Enter a numeric target.";
@@ -153,6 +160,13 @@ export default function KpiForm({ initial, onSubmit, onCancel, saving }) {
           <div className="check-row">
             <input id="kpi-active" type="checkbox" checked={!!form.is_active} onChange={set("is_active")} />
             <label htmlFor="kpi-active">Active — appears in measurement entry and dashboards</label>
+          </div>
+        </div>
+
+        <div className="field field--full">
+          <div className="check-row">
+            <input id="kpi-team" type="checkbox" checked={!!form.is_team_kpi} onChange={set("is_team_kpi")} />
+            <label htmlFor="kpi-team">Team KPI — Can only be assigned to a single team member</label>
           </div>
         </div>
       </div>

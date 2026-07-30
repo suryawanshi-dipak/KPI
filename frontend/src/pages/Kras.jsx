@@ -17,6 +17,16 @@ export default function Kras() {
   const [employees, setEmployees] = useState([]);
   const [kraFilter, setKraFilter] = useState("all");
   const [q, setQ] = useState("");
+  // Track which KRA area cards have their KPI lists expanded
+  const [expandedKras, setExpandedKras] = useState({});
+
+  // Helper function to toggle expansion state of a specific KRA card
+  const toggleKraExpanded = (id) => {
+    setExpandedKras((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   const load = () => Promise.all([listKras(), listKpis(), getStats(), getCurrentUser(), listAssignments(), listEmployees()])
     .then(([r, k, s, user, a, e]) => { setKras(r); setKpis(k); setStats(s); setCurrentUser(user); setAssignments(a); setEmployees(e); });
@@ -176,13 +186,33 @@ export default function Kras() {
                   <span className="h-red" style={{ width:`${counts.red/total*100}%` }} />
                 </div>
                 <div style={{ marginTop:"0.9rem", display:"flex", flexDirection:"column", gap:"0.5rem" }}>
-                  {areaKpis.slice(0,4).map((k) => (
+                  {/* Show all KPIs if card is expanded, otherwise slice to only show the first 4 */}
+                  {(expandedKras[kra.id] ? areaKpis : areaKpis.slice(0, 4)).map((k) => (
                     <div key={k.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                       <span style={{ fontSize:"0.84rem" }}>{k.name}</span>
                       <StatusPill status={stats.latestByKpi[k.id]?.status || "unknown"} />
                     </div>
                   ))}
-                  {areaKpis.length > 4 && <span className="cell-sub">+{areaKpis.length-4} more</span>}
+                  
+                  {/* Show "Show More" or "Show Less" toggle button if KRA area contains more than 4 KPIs */}
+                  {areaKpis.length > 4 && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      style={{
+                        padding: "0.2rem 0.5rem",
+                        fontSize: "0.78rem",
+                        height: "auto",
+                        marginTop: "0.25rem",
+                        color: "var(--primary)",
+                        alignSelf: "flex-start",
+                        fontWeight: 600
+                      }}
+                      onClick={() => toggleKraExpanded(kra.id)}
+                    >
+                      {expandedKras[kra.id] ? "Show Less" : `Show More (+${areaKpis.length - 4})`}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

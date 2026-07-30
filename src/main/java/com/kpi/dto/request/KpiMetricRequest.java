@@ -52,4 +52,6 @@ public class KpiMetricRequest {
     private String measurementInstruction;
 
     private Boolean isActive;
+
+    private Boolean isTeamKpi;
 }

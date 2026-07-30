@@ -210,6 +210,7 @@ function mapKpiToFrontend(b) {
     source_reference: b.sourceReference,
     measurement_instruction: b.measurementInstruction,
     is_active: b.isActive ? 1 : 0,
+    is_team_kpi: b.isTeamKpi ? 1 : 0,
     version: b.version,
     created_at: b.createdAt,
     updated_at: b.updatedAt,
@@ -309,7 +310,8 @@ function mapKpiToBackend(f) {
     sourceSystem: f.source_system,
     sourceReference: f.source_reference,
     measurementInstruction: f.measurement_instruction,
-    isActive: f.is_active === 1 || f.is_active === true
+    isActive: f.is_active === 1 || f.is_active === true,
+    isTeamKpi: f.is_team_kpi === 1 || f.is_team_kpi === true
   };
 }
 

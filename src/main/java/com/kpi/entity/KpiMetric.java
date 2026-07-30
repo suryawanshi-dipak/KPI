@@ -67,6 +67,10 @@ public class KpiMetric {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "is_team_kpi")
+    @Builder.Default
+    private Boolean isTeamKpi = false;
+
     @Builder.Default
     private Integer version = 1;
 
@@ -93,6 +97,10 @@ public class KpiMetric {
 
         if (isActive == null) {
             isActive = true;
+        }
+
+        if (isTeamKpi == null) {
+            isTeamKpi = false;
         }
 
         if (isDeleted == null) {

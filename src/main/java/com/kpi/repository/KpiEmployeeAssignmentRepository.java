@@ -37,6 +37,12 @@ public interface KpiEmployeeAssignmentRepository extends JpaRepository<KpiEmploy
        // Check if an active KPI assignment already exists for the given KPI and employee, excluding a specific assignment ID.
        boolean existsByKpiMetricIdAndEmployeeIdAndIdNotAndIsDeletedFalse(Integer kpiMetricId, Integer employeeId, Integer id);
 
+       // Check if any active KPI assignment exists for the given KPI.
+       boolean existsByKpiMetricIdAndIsDeletedFalse(Integer kpiMetricId);
+
+       // Check if any active KPI assignment exists for the given KPI, excluding a specific assignment ID.
+       boolean existsByKpiMetricIdAndIdNotAndIsDeletedFalse(Integer kpiMetricId, Integer id);
+
 
        @Modifying
        @Transactional

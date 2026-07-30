@@ -50,6 +50,8 @@ public class KpiMetricResponse {
 
     private Boolean isActive;
 
+    private Boolean isTeamKpi;
+
     private Integer version;
 
     private LocalDateTime createdAt;

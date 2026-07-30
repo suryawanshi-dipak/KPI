@@ -68,13 +68,21 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
     @Override
     @Transactional
     public KpiAssignmentResponse create(KpiAssignmentRequest request) {
+        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
+
+        // Validate if this is a Team KPI and is already assigned to someone
+        if (Boolean.TRUE.equals(metric.getIsTeamKpi())) {
+            if (assignmentRepository.existsByKpiMetricIdAndIsDeletedFalse(request.getKpiMetricId())) {
+                throw new IllegalArgumentException("Team KPI is already assigned to a member. Team KPIs can only be assigned to a single member.");
+            }
+        }
+
         // Validate if this KPI is already assigned to this employee/user
         if (assignmentRepository.existsByKpiMetricIdAndEmployeeIdAndIsDeletedFalse(request.getKpiMetricId(), request.getEmployeeId())) {
             throw new IllegalArgumentException("this KPI is already assigned to the User");
         }
 
-        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
-                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getEmployeeId()));
 
@@ -97,13 +105,21 @@ public class KpiAssignmentServiceImpl implements KpiAssignmentService {
     public KpiAssignmentResponse update(Integer id, KpiAssignmentRequest request) {
         KpiEmployeeAssignment assignment = findOrThrow(id);
 
+        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
+
+        // Validate if this is a Team KPI and is already assigned to someone else
+        if (Boolean.TRUE.equals(metric.getIsTeamKpi())) {
+            if (assignmentRepository.existsByKpiMetricIdAndIdNotAndIsDeletedFalse(request.getKpiMetricId(), id)) {
+                throw new IllegalArgumentException("Team KPI is already assigned to a member. Team KPIs can only be assigned to a single member.");
+            }
+        }
+
         // Validate if this KPI is already assigned to this employee/user (excluding the current assignment)
         if (assignmentRepository.existsByKpiMetricIdAndEmployeeIdAndIdNotAndIsDeletedFalse(request.getKpiMetricId(), request.getEmployeeId(), id)) {
             throw new IllegalArgumentException("this KPI is already assigned to the User");
         }
 
-        KpiMetric metric = kpiMetricRepository.findByIdAndIsDeletedFalse(request.getKpiMetricId())
-                .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee employee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getEmployeeId()));
 
