@@ -10,9 +10,10 @@ function buildViewOptions(currentUser, employeesList) {
   if (!currentUser) return options;
 
   if (String(currentUser.role).toLowerCase() === "manager") {
-    const reports = employeesList.filter(
-      (employee) => Number(employee.managerId) === Number(currentUser.id)
-    );
+    // Filter reports of the manager and sort them alphabetically
+    const reports = employeesList
+      .filter((employee) => Number(employee.managerId) === Number(currentUser.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     options.push({
       id: Number(currentUser.id),
@@ -30,9 +31,10 @@ function buildViewOptions(currentUser, employeesList) {
       }
     });
   } else if (String(currentUser.role).toLowerCase() === "admin") {
-    const nonAdminUsers = employeesList.filter(
-      (employee) => String(employee.role || "").toLowerCase() !== "admin"
-    );
+    // Filter non-admin users and sort them alphabetically
+    const nonAdminUsers = employeesList
+      .filter((employee) => String(employee.role || "").toLowerCase() !== "admin")
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     options.push({
       id: Number(currentUser.id),
@@ -91,6 +93,10 @@ export default function Dashboard() {
 
         if (!isMounted) return;
 
+        // Filter out inactive KPIs at loading stage.
+        // For all user roles, the dashboard data should only appear for active KPIs.
+        const activeKpis = allKpis.filter((k) => k.is_active === 1 || k.is_active === true);
+
         const options = buildViewOptions(user, employeesList);
         const effectiveViewUserId = options.some((option) => Number(option.id) === Number(selectedUserId ?? user.id))
           ? Number(selectedUserId ?? user.id)
@@ -101,21 +107,21 @@ export default function Dashboard() {
         setViewOptions(options);
         setSelectedUserId(effectiveViewUserId);
         setAssignments(assignments);
-        // Store total active KPIs count from listKpis response
-        setSystemKpisCount(allKpis.length);
+        // Store total active KPIs count from filtered activeKpis list
+        setSystemKpisCount(activeKpis.length);
 
         const isAdminSelf = String(user.role).toLowerCase() === "admin" && Number(effectiveViewUserId) === Number(user.id);
         let allowedKpiIds = [];
 
         if (isAdminSelf) {
-          allowedKpiIds = allKpis.map((k) => Number(k.id));
+          allowedKpiIds = activeKpis.map((k) => Number(k.id));
         } else {
           allowedKpiIds = assignments
             .filter((a) => Number(a.employee_id) === Number(effectiveViewUserId))
             .map((a) => Number(a.kpi_metric_id));
         }
 
-        const filteredKpis = allKpis.filter((k) => allowedKpiIds.includes(Number(k.id)));
+        const filteredKpis = activeKpis.filter((k) => allowedKpiIds.includes(Number(k.id)));
 
         setStats(statsData);
         setKras(allKras);
@@ -415,34 +421,51 @@ const pct = dashboardCounts.totalKpis
       </div>
 
       <div className="stat-grid">
-        <div className="stat">
-          <div className="stat__label">Overview</div>
-          <div style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-            {/* KPI Assignments Count (per role/view context) */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>
-                {isAggregatedView ? "KPI Assignments:" : "Assigned KPIs:"}
-              </span>
-              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
-                {isAggregatedView ? assignments.length : dashboardCounts.totalKpis}
-              </span>
-            </div>
-            {/* Total Active KPIs Count (same as appeared in KPI screen) */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KPIs:</span>
-              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
-                {systemKpisCount}
-              </span>
-            </div>
-            {/* Total Active KRAs Count (same as appeared in KRA area tab) */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KRAs:</span>
-              <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
-                {kras.length}
-              </span>
+        {/* For Employees and Managers (non-aggregated individual view), show only the number of assigned KPIs */}
+        {!isAggregatedView ? (
+          <div className="stat">
+            <div className="stat__label">Assigned KPIs</div>
+            <div className="stat__value">{dashboardCounts.totalKpis}</div>
+            <div className="stat__sub">KPIs assigned to {selectedUserId === currentUser?.id ? "you" : "this employee"}</div>
+          </div>
+        ) : (
+          /* For Admin aggregated view, show all KPIs overview details, including assignments, active KPIs, active KRAs, and total active employees */
+          <div className="stat">
+            <div className="stat__label">Overview</div>
+            <div style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              {/* KPI Assignments Count */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>
+                  KPI Assignments:
+                </span>
+                <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                  {dashboardCounts.totalKpis}
+                </span>
+              </div>
+              {/* Total Active KPIs Count */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KPIs:</span>
+                <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                  {systemKpisCount}
+                </span>
+              </div>
+              {/* Total Active KRAs Count */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active KRAs:</span>
+                <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink)" }}>
+                  {kras.length}
+                </span>
+              </div>
+              {/* Active Employees Count Note (in small format) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderTop: "1px solid var(--rule)", paddingTop: "0.25rem", marginTop: "0.25rem" }}>
+                <span style={{ fontSize: "0.76rem", color: "var(--muted)", fontWeight: 500 }}>Active Employees:</span>
+                <span className="mono" style={{ fontSize: "1rem", fontWeight: 600, color: "var(--ink-soft)" }}>
+                  {employees.filter(e => !e.is_deleted).length}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="stat stat--ok">
           <div className="stat__label">Green</div>
           <div className="stat__value">{dashboardCounts.green}</div>

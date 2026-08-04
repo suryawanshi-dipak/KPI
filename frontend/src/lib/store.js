@@ -1377,3 +1377,67 @@ export function employeeName(id) {
   const e = db.employees.find((x) => Number(x.id) === Number(id));
   return e ? e.name : "—";
 }
+
+/* ── REPORT ENDPOINTS ──────────────────────────────────────── */
+
+/**
+ * Fetch all unique period labels for dropdown selection in Reports page.
+ */
+export async function getReportPeriods() {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/reports/periods`, { headers });
+    if (!res.ok) throw new Error("Failed to fetch report periods");
+    const json = await res.json();
+    return json.data || [];
+  } catch (err) {
+    console.error("getReportPeriods error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch Executive Summary report data for a selected period.
+ */
+export async function getExecutiveSummaryReport(periodLabel) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(
+      `${API_BASE}/reports/executive-summary?periodLabel=${encodeURIComponent(
+        periodLabel
+      )}`,
+      { headers }
+    );
+    if (!res.ok) throw new Error("Failed to fetch executive summary");
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("getExecutiveSummaryReport error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch KPI Health Report data for a selected period.
+ */
+export async function getKpiHealthReport(periodLabel) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(
+      `${API_BASE}/reports/kpi-health?periodLabel=${encodeURIComponent(
+        periodLabel
+      )}`,
+      { headers }
+    );
+    if (!res.ok) throw new Error("Failed to fetch KPI health report");
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("getKpiHealthReport error:", err);
+    throw err;
+  }
+}
+

@@ -64,6 +64,18 @@ export default function Measurements() {
 
   const kpiName = (id) => kpis.find((k) => Number(k.id) === Number(id))?.name || "—";
 
+  // Look up the KPI record for a measurement so we can render its configured target
+  const kpiForMeasurement = (kpiMetricId) =>
+    kpis.find((k) => Number(k.id) === Number(kpiMetricId));
+
+  // Format KPI target with direction prefix (≥ / ≤) and percentage unit when applicable
+  const formatTarget = (kpi) => {
+    if (!kpi) return "—";
+    const prefix = kpi.direction === "higher_better" ? "≥ " : "≤ ";
+    const suffix = kpi.unit === "Percentage" ? "%" : "";
+    return `${prefix}${kpi.target_value}${suffix}`;
+  };
+
   // 1. Role-based base visibility filtering
   let visibleMeasurements = [];
   if (currentUser) {
@@ -292,7 +304,7 @@ async function handleDelete(id) {
         <div className="table-wrap">
           <table className="data">
             <thead><tr>
-              <th>KPI</th><th>Period</th><th>Value</th><th>Status</th>
+              <th>KPI</th><th>Period</th><th>Value</th><th>Target</th><th>Status</th>
               <th>Recorded by</th>
                  <th>Note</th>
                   <th></th>
@@ -306,6 +318,8 @@ async function handleDelete(id) {
                     <div className="cell-sub">{m.period_start_date} → {m.period_end_date}</div>
                   </td>
                   <td className="mono">{m.is_pending ? "—" : m.measured_value}</td>
+                  {/* Target threshold for the KPI this measurement belongs to */}
+                  <td className="mono">{formatTarget(kpiForMeasurement(m.kpi_metric_id))}</td>
                   <td><StatusPill status={m.status} /></td>
                   <td className="cell-sub">{employeeName(m.measured_by)}</td>
                   <td className="cell-sub" style={{ maxWidth: 260 }}>

@@ -7,39 +7,67 @@ import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
 import { getCurrentUser, getKpi, listEmployees, measurementsForKpi, saveMeasurement, kraName, employeeName, listAssignments } from "../lib/store";
 
+/**
+ * Build the "View by employee" dropdown options for manager/admin users.
+ * Only employees actually assigned to this KPI are included.
+ * When no one is assigned, returns an empty array (no fallback to current user).
+ */
 function buildViewOptions(currentUser, employeesList, assignmentsList, kpiId) {
   const options = [];
 
   if (!currentUser) return options;
 
+  // Find all employee IDs assigned to this KPI
   const assignedEmployeeIds = (assignmentsList || [])
     .filter((a) => Number(a.kpi_metric_id) === Number(kpiId))
     .map((a) => Number(a.employee_id));
 
-  const roleLower = String(currentUser.role).toLowerCase();
+  if (String(currentUser.role).toLowerCase() === "manager") {
+    // If the manager is assigned to this KPI, put "Me" at the top of the options
+    if (assignedEmployeeIds.includes(Number(currentUser.id))) {
+      options.push({ id: Number(currentUser.id), name: currentUser.name || "Me", role: currentUser.role });
+    }
+    // Filter manager's direct reports and sort them alphabetically A to Z
+    const reports = employeesList
+      .filter((employee) => Number(employee.managerId) === Number(currentUser.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (roleLower === "manager" || roleLower === "admin") {
-    employeesList.forEach((employee) => {
+    reports.forEach((employee) => {
       if (assignedEmployeeIds.includes(Number(employee.id))) {
-        const isSelf = Number(employee.id) === Number(currentUser.id);
-        const isReport = Number(employee.managerId) === Number(currentUser.id);
-        
-        let label = employee.name;
-        if (isSelf) {
-          label += roleLower === "admin" ? " (Admin/Me)" : " (Me)";
-        } else if (isReport) {
-          label += " (Report)";
+        if (!options.some((option) => Number(option.id) === Number(employee.id))) {
+          options.push({ id: Number(employee.id), name: employee.name, role: employee.role });
         }
+      }
+    });
+  } else if (String(currentUser.role).toLowerCase() === "admin") {
+    // Sort all employees alphabetically by name first
+    const sortedEmployees = [...employeesList].sort((a, b) => a.name.localeCompare(b.name));
 
+    // Put "Me" (Admin) at the top of the list if they are assigned to this KPI
+    const isMeAssigned = assignedEmployeeIds.includes(Number(currentUser.id));
+    if (isMeAssigned) {
+      options.push({
+        id: Number(currentUser.id),
+        name: `${currentUser.name || "Me"} (Admin)`,
+        role: currentUser.role
+      });
+    }
+
+    sortedEmployees.forEach((employee) => {
+      // Skip admin themselves since we handled it at the top
+      if (Number(employee.id) === Number(currentUser.id)) return;
+
+      if (assignedEmployeeIds.includes(Number(employee.id))) {
         options.push({
           id: Number(employee.id),
-          name: label,
+          name: employee.name,
           role: employee.role
         });
       }
     });
   }
 
+  // Fallback: if options list is empty, push current user as option
   if (options.length === 0) {
     options.push({ id: Number(currentUser.id), name: currentUser.name || "Me", role: currentUser.role });
   }
@@ -88,11 +116,14 @@ export default function KpiDetail() {
     );
     const isTeamMember = isTeamKpi && teamKpiAssignee && myTeams.has(teamKpiAssignee.team);
 
-    // If a team member (and not manager/admin), default to viewing the assignee's measurements
+    // Resolve which employee's measurements to show.
+    // For unassigned KPIs (empty options), leave null so the UI shows an empty state.
     const defaultUserId = canSelectUser
-      ? (options.some((option) => Number(option.id) === Number(requestedUserId))
-          ? Number(requestedUserId)
-          : (options.find((option) => Number(option.id) === Number(selectedUserId))?.id ?? options[0]?.id ?? user.id))
+      ? (options.length === 0
+          ? null
+          : (options.some((option) => Number(option.id) === Number(requestedUserId))
+              ? Number(requestedUserId)
+              : (options.find((option) => Number(option.id) === Number(selectedUserId))?.id ?? options[0]?.id)))
       : (isTeamMember && teamKpiAssignee ? Number(teamKpiAssignee.employee_id) : Number(user.id));
 
     setKpi(kpiData);
@@ -114,11 +145,14 @@ export default function KpiDetail() {
     (a) => Number(a.kpi_metric_id) === Number(id) && Number(a.employee_id) === Number(currentUser?.id)
   );
 
-  const effectiveUserId = selectedUserId ?? currentUser?.id ?? null;
+  const hasAssignees = viewOptions.length > 0;
+  const effectiveUserId = canSelectUser
+    ? (hasAssignees ? (selectedUserId ?? viewOptions[0]?.id ?? null) : null)
+    : (selectedUserId ?? currentUser?.id ?? null);
 
   const visibleMeasurements = effectiveUserId
     ? ms.filter((measurement) => Number(measurement.measured_by) === Number(effectiveUserId))
-    : ms;
+    : [];
 
   const activeMs = visibleMeasurements.filter(m => {
     // A measurement is superseded if there is another measurement in visibleMeasurements whose corrected_from_id matches its id
@@ -152,18 +186,24 @@ export default function KpiDetail() {
           {canSelectUser && (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
               <label style={{ fontSize: "0.85rem", color: "var(--ink-soft)", fontWeight: 600 }}>View by employee</label>
-              <select
-                className="select"
-                value={effectiveUserId || ""}
-                onChange={(event) => setSelectedUserId(Number(event.target.value))}
-                style={{ minWidth: 220 }}
-              >
-                {viewOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}{option.role ? ` (${option.role})` : ""}
-                  </option>
-                ))}
-              </select>
+              {hasAssignees ? (
+                <select
+                  className="select"
+                  value={effectiveUserId || ""}
+                  onChange={(event) => setSelectedUserId(Number(event.target.value))}
+                  style={{ minWidth: 220 }}
+                >
+                  {viewOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}{option.role ? ` (${option.role})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: "0.85rem", color: "var(--muted)", fontStyle: "italic" }}>
+                  Not assigned to anyone — assign employees to view trends
+                </span>
+              )}
             </div>
           )}
           {(currentUser && (currentUser.role === "admin" || currentUser.role === "manager" || isDirectlyAssigned)) && (
@@ -201,7 +241,16 @@ export default function KpiDetail() {
                 <Line type="monotone" dataKey="value" stroke="#3a5bd9" strokeWidth={2.5} dot={{ r:3 }} />
               </LineChart>
             </ResponsiveContainer>
-          ) : <div className="empty"><h3>No measurements yet</h3><p>Enter the first reading to start the trend.</p></div>}
+          ) : (
+            <div className="empty">
+              <h3>{canSelectUser && !hasAssignees ? "No assignees" : "No measurements yet"}</h3>
+              <p>
+                {canSelectUser && !hasAssignees
+                  ? "Assign employees to this KPI to view their measurement trends."
+                  : "Enter the first reading to start the trend."}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

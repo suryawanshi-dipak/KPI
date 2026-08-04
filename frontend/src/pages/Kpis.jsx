@@ -5,7 +5,7 @@ import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import KpiForm from "../forms/KpiForm";
 import MeasurementForm from "../forms/MeasurementForm";
-import { listKpis, saveKpi, getStats, kraName, saveMeasurement , employeeName , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser, listMeasurements } from "../lib/store";
+import { listKpis, saveKpi, getStats, kraName, saveMeasurement , employeeName , deleteKpi , saveAssignment , assignmentsForKpi , deleteAssignment, listEmployees, listAssignments, getCurrentUser, listMeasurements, listKras } from "../lib/store";
 import KpiAssignmentForm from "../forms/KpiAssignmentForm";
 
 export default function Kpis() {
@@ -23,8 +23,13 @@ export default function Kpis() {
   const [employees, setEmployees] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [managerFilter, setManagerFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  // Default to "active" so managers/admins see only live KPIs on first load
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [kraFilter, setKraFilter] = useState("all");
+  const [kras, setKras] = useState([]);
   const [measurements, setMeasurements] = useState([]);
+  // Filter KPIs by assigned team (Scrum, Kanban, Intern)
+  const [teamFilter, setTeamFilter] = useState("all");
 
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [toast, setToast] = useState(null);
@@ -32,7 +37,7 @@ export default function Kpis() {
   const nav = useNavigate();
   const location = useLocation();
 
-  // Load KPI configuration, stats, assignments, employees and current logged in user in parallel
+  // Load KPI configuration, stats, assignments, employees, KRAs and current logged in user in parallel
   const load = () =>
     Promise.all([
       listKpis(),
@@ -40,15 +45,17 @@ export default function Kpis() {
       listAssignments(),
       listEmployees(),
       getCurrentUser(),
-      listMeasurements()
+      listMeasurements(),
+      listKras(),
     ])
-      .then(([k, s, a, e, user, m]) => {
+      .then(([k, s, a, e, user, m, kraList]) => {
         setKpis(k);
         setStats(s);
         setAssignments(a);
         setEmployees(e);
         setCurrentUser(user);
         setMeasurements(m);
+        setKras(kraList);
       })
       .catch((err) => {
         console.error("Error loading KPI configuration data:", err);
@@ -238,15 +245,27 @@ export default function Kpis() {
     }
   }
 
-  // Filter list by search query and KPI active status
+  // Filter list by search query, KRA area, KPI active status, and assigned team
   const filtered = baseKpis.filter((k) => {
     const matchesSearch = k.name.toLowerCase().includes(q.toLowerCase()) ||
       kraName(k.kra_area_id).toLowerCase().includes(q.toLowerCase());
 
     if (!matchesSearch) return false;
 
+    // Filter by selected KRA area (client-side match on kra_area_id)
+    if (kraFilter !== "all" && Number(k.kra_area_id) !== Number(kraFilter)) return false;
+
+    // Filter by KPI active/inactive status (default "active" hides retired KPIs)
     if (statusFilter === "active" && k.is_active !== 1 && k.is_active !== true) return false;
     if (statusFilter === "inactive" && k.is_active !== 0 && k.is_active !== false) return false;
+
+    // Filter by assigned team — keep KPIs that have at least one assignment on the selected team
+    if (teamFilter !== "all") {
+      const hasTeamAssignment = assignments.some(
+        (a) => Number(a.kpi_metric_id) === Number(k.id) && a.team === teamFilter
+      );
+      if (!hasTeamAssignment) return false;
+    }
 
     return true;
   });
@@ -274,8 +293,99 @@ export default function Kpis() {
     return sorted[0].status;
   };
 
-  // Status column is shown to employees by default, and to managers/admins only when a specific employee filter is selected
-  const showStatusColumn = isEmployee || (managerFilter !== "all");
+  // Resolve which employee's measurements drive the dynamic "Actual Value" column.
+  // Employees always see their own values; managers/admins see values when a specific
+  // employee (or "Only My KPIs") is selected — hidden for "Show All" and "Unassigned".
+  let filterUserId = null;
+  if (isEmployee) {
+    filterUserId = Number(currentUser.id);
+  } else if (isManager || isAdmin) {
+    if (managerFilter === "self") {
+      filterUserId = Number(currentUser.id);
+    } else if (managerFilter !== "all" && managerFilter !== "unassigned") {
+      filterUserId = Number(managerFilter);
+    }
+  }
+  const showActualValueColumn = filterUserId !== null;
+
+  // Get the latest actual measurement value entered by a specific employee for a KPI
+  const getLatestActualValueForEmployee = (kpiId, empId) => {
+    if (!measurements) return "—";
+    const kpiMs = measurements.filter(
+      (m) =>
+        Number(m.kpi_metric_id) === Number(kpiId) &&
+        Number(m.measured_by) === Number(empId) &&
+        !m.is_deleted
+    );
+    if (kpiMs.length === 0) return "—";
+    const sorted = [...kpiMs].sort((a, b) =>
+      String(b.period_start_date).localeCompare(String(a.period_start_date))
+    );
+    const latest = sorted[0];
+    if (latest.is_pending) return "Pending";
+    return latest.measured_value ?? "—";
+  };
+
+  // Status column is shown to employees by default, and to managers/admins when a
+  // specific employee filter is selected (not "all" or "unassigned" — no assignee to measure)
+  const showStatusColumn = isEmployee || (managerFilter !== "all" && managerFilter !== "unassigned");
+
+  // Build the CSV export dataset scoped by role:
+  // - Admin: every active KPI in the system
+  // - Manager: only active KPIs assigned to the manager or their direct-report team
+  const handleExportCsv = () => {
+    let activeKpisForExport = kpis.filter(
+      (k) => k.is_active === 1 || k.is_active === true
+    );
+
+    if (isManager) {
+      // Manager + all employees who report to this manager
+      const managerTeamIds = new Set(
+        employees
+          .filter(
+            (e) =>
+              Number(e.id) === Number(currentUser.id) ||
+              Number(e.managerId) === Number(currentUser.id)
+          )
+          .map((e) => Number(e.id))
+      );
+
+      activeKpisForExport = activeKpisForExport.filter((k) =>
+        assignments.some(
+          (a) =>
+            Number(a.kpi_metric_id) === Number(k.id) &&
+            managerTeamIds.has(Number(a.employee_id))
+        )
+      );
+    }
+
+    exportActiveKpisCsv(activeKpisForExport, assignments, kraName, employeeName);
+    flash(`Exported ${activeKpisForExport.length} active KPI${activeKpisForExport.length === 1 ? "" : "s"} to CSV`);
+  };
+
+  // Keep every filter control on one horizontal row; allow sideways scroll on narrow viewports
+  const filterBarStyle = {
+    flexWrap: "nowrap",
+    overflowX: "auto",
+    paddingBottom: "0.25rem",
+  };
+  const filterGroupStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    flexShrink: 0,
+  };
+  const filterLabelStyle = {
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    color: "var(--ink-soft)",
+    whiteSpace: "nowrap",
+  };
+  const filterSelectStyle = {
+    width: "auto",
+    minWidth: "120px",
+    padding: "0.45rem 0.6rem",
+  };
 
   return (
     <Layout crumb={<><span>Configuration</span> · <b>KPIs</b></>}>
@@ -284,28 +394,60 @@ export default function Kpis() {
           <h1>KPIs</h1>
           <p>Define and configure key performance indicators and their thresholds.</p>
         </div>
-        {/* New KPI button is hidden for regular employees */}
+        {/* Export + New KPI actions — visible only to managers and admins */}
         {(isAdmin || isManager) && (
-          <button className="btn btn--primary" onClick={() => setEditing({})}>
-            <Icon.plus /> New KPI
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              className="btn btn--sub"
+              title={
+                isManager
+                  ? "Download active KPIs assigned to you and your team as CSV"
+                  : "Download all active KPIs as a CSV file (opens in Excel)"
+              }
+              onClick={handleExportCsv}
+            >
+              Export to Excel (CSV)
+            </button>
+            <button className="btn btn--primary" onClick={() => setEditing({})}>
+              <Icon.plus /> New KPI
+            </button>
+          </div>
         )}
       </div>
 
-      <div className="filter-bar">
-        <div className="search">
+      {/* All KPI filters rendered on a single line (scrolls horizontally when space is tight) */}
+      <div className="filter-bar" style={filterBarStyle}>
+        <div className="search" style={{ flex: "1 1 auto", minWidth: "160px" }}>
           <Icon.search />
           <input placeholder="Search KPIs or KRA areas…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
 
-        {/* Filter by KPI status select dropdown */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
-            Filter by KPI:
-          </span>
+        {/* Filter by KRA area select dropdown */}
+        <div style={filterGroupStyle}>
+          <span style={filterLabelStyle}>Filter by KRA:</span>
           <select
             className="select"
-            style={{ width: "auto", minWidth: "130px", padding: "0.45rem 0.6rem" }}
+            style={filterSelectStyle}
+            value={kraFilter}
+            onChange={(e) => setKraFilter(e.target.value)}
+          >
+            <option value="all">All KRA areas</option>
+            {[...kras]
+              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.area_name.localeCompare(b.area_name))
+              .map((kra) => (
+                <option key={kra.id} value={kra.id}>
+                  {kra.area_name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        {/* Filter by KPI active/inactive status */}
+        <div style={filterGroupStyle}>
+          <span style={filterLabelStyle}>Filter by KPI:</span>
+          <select
+            className="select"
+            style={filterSelectStyle}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -315,20 +457,36 @@ export default function Kpis() {
           </select>
         </div>
         
-        {/* Manager/Admin KPI assignments filter dropdown */}
+        {/* Filter KPIs by the team on their employee assignments (Scrum, Kanban, Intern) */}
+        <div style={filterGroupStyle}>
+          <span style={filterLabelStyle}>Filter by Team:</span>
+          <select
+            className="select"
+            style={filterSelectStyle}
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+          >
+            <option value="all">All Teams</option>
+            <option value="Scrum">Scrum</option>
+            <option value="Kanban">Kanban</option>
+            <option value="Intern">Intern</option>
+          </select>
+        </div>
+
+        {/* Manager/Admin employee filter — stays on the same row as the other filters */}
         {(isManager || isAdmin) && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
-              Filter by Employee:
-            </span>
+          <div style={filterGroupStyle}>
+            <span style={filterLabelStyle}>Filter by Employee:</span>
             <select
               className="select"
-              style={{ width: "auto", minWidth: "180px", padding: "0.45rem 0.6rem" }}
+              style={{ ...filterSelectStyle, minWidth: "160px" }}
               value={managerFilter}
               onChange={(e) => setManagerFilter(e.target.value)}
             >
               <option value="all">Show All</option>
               <option value="self">Only My KPIs</option>
+              {/* KPIs with zero employee assignments — backend filter logic already handled above */}
+              <option value="unassigned">Unassigned</option>
               {isManager && employees
                 .filter((e) => Number(e.managerId) === Number(currentUser.id))
                 /* Sort employee options alphabetically A to Z */
@@ -351,7 +509,8 @@ export default function Kpis() {
           </div>
         )}
 
-        <span className="tag">{filtered.length} of {baseKpis.length}</span>
+        {/* Result count tag — pinned to the end of the single-line filter row */}
+        <span className="tag" style={{ flexShrink: 0 }}>{filtered.length} of {baseKpis.length}</span>
       </div>
 
       <div className="card">
@@ -363,6 +522,8 @@ export default function Kpis() {
                 <th>KRA area</th>
                 {/* Hide Assignees column for employees */}
                 {!isEmployee && <th>Assignees</th>}
+                {/* Actual Value appears just before Target when viewing a specific employee's KPIs */}
+                {showActualValueColumn && <th>Actual Value</th>}
                 <th>Target</th>
                 <th>Direction</th>
                 <th>Frequency</th>
@@ -410,6 +571,13 @@ export default function Kpis() {
                         )}
                       </td>
                     )}
+
+                    {/* Latest measurement value entered by the filtered employee for this KPI */}
+                    {showActualValueColumn && (
+                      <td className="mono">
+                        {getLatestActualValueForEmployee(k.id, filterUserId)}
+                      </td>
+                    )}
                     
                     <td className="mono">
                       {k.direction === "higher_better" ? "≥ " : "≤ "}{k.target_value}
@@ -446,24 +614,18 @@ export default function Kpis() {
                                 const isTeamKpi = k.is_team_kpi === 1 || k.is_team_kpi === true;
                                 const teamAssignment = isTeamKpi ? assignments.find(a => Number(a.kpi_metric_id) === Number(k.id)) : null;
 
-                                const assignedEmployeeIds = assignments
-                                  .filter(a => Number(a.kpi_metric_id) === Number(k.id))
-                                  .map(a => Number(a.employee_id));
+                                const viewUserId = resolveTrendViewUserId(k.id, {
+                                  assignments,
+                                  currentUser,
+                                  isManager,
+                                  isAdmin,
+                                  managerFilter,
+                                  isTeamKpi,
+                                  isDirectlyAssigned,
+                                  teamAssignment,
+                                });
 
-                                let selectedEmployeeId = currentUser.id;
-                                if (isManager || isAdmin) {
-                                  if (managerFilter !== "all" && managerFilter !== "self" && assignedEmployeeIds.includes(Number(managerFilter))) {
-                                    selectedEmployeeId = Number(managerFilter);
-                                  } else if (assignedEmployeeIds.includes(Number(currentUser.id))) {
-                                    selectedEmployeeId = Number(currentUser.id);
-                                  } else if (assignedEmployeeIds.length > 0) {
-                                    selectedEmployeeId = assignedEmployeeIds[0];
-                                  }
-                                } else if (isTeamKpi && !isDirectlyAssigned && teamAssignment) {
-                                  selectedEmployeeId = teamAssignment.employee_id;
-                                }
-
-                                nav(`/kpis/${k.id}?viewUser=${selectedEmployeeId}`);
+                                nav(viewUserId ? `/kpis/${k.id}?viewUser=${viewUserId}` : `/kpis/${k.id}`);
                               }}
                             >
                               <Icon.eye />
@@ -494,20 +656,15 @@ export default function Kpis() {
                                 className="icon-btn"
                                 title="View trend"
                                 onClick={() => {
-                                  const assignedEmployeeIds = assignments
-                                    .filter(a => Number(a.kpi_metric_id) === Number(k.id))
-                                    .map(a => Number(a.employee_id));
+                                  const viewUserId = resolveTrendViewUserId(k.id, {
+                                    assignments,
+                                    currentUser,
+                                    isManager,
+                                    isAdmin,
+                                    managerFilter,
+                                  });
 
-                                  let selectedEmployeeId = currentUser.id;
-                                  if (managerFilter !== "all" && managerFilter !== "self" && assignedEmployeeIds.includes(Number(managerFilter))) {
-                                    selectedEmployeeId = Number(managerFilter);
-                                  } else if (assignedEmployeeIds.includes(Number(currentUser.id))) {
-                                    selectedEmployeeId = Number(currentUser.id);
-                                  } else if (assignedEmployeeIds.length > 0) {
-                                    selectedEmployeeId = assignedEmployeeIds[0];
-                                  }
-
-                                  nav(`/kpis/${k.id}?viewUser=${selectedEmployeeId}`);
+                                  nav(viewUserId ? `/kpis/${k.id}?viewUser=${viewUserId}` : `/kpis/${k.id}`);
                                 }}
                               >
                                 <Icon.eye />
@@ -655,4 +812,144 @@ function cap(s) {
   return s
     .replace(/_/g, " ")
     .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Escape a CSV cell value per RFC 4180 — wrap in quotes and double any internal quotes.
+ */
+function csvEscape(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+/** Human-readable direction label matching the KPI table display. */
+function formatDirection(direction) {
+  if (direction === "higher_better") return "Higher ↑";
+  if (direction === "lower_better") return "Lower ↓";
+  return direction || "";
+}
+
+/** Normalize created_at timestamps for spreadsheet readability. */
+function formatCreatedAt(value) {
+  if (!value) return "";
+  return String(value).replace("T", " ").slice(0, 19);
+}
+
+/** Collect comma-separated assignee names for a KPI (sorted A→Z, de-duplicated). */
+function assigneeNamesForKpi(kpiId, assignments) {
+  const names = assignments
+    .filter((a) => Number(a.kpi_metric_id) === Number(kpiId))
+    .map((a) => a.employee_name)
+    .filter(Boolean);
+
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b)).join(", ");
+}
+
+/**
+ * Trigger a browser download of CSV content as a file Excel can open directly.
+ * Same approach used on the Reports screen.
+ */
+function downloadCsv(content, filename) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Compile active KPI rows into a CSV spreadsheet and download it.
+ * One row per KPI with configuration metadata and comma-separated assignee names.
+ */
+function exportActiveKpisCsv(kpiList, assignments, kraNameFn, employeeNameFn) {
+  const headers = [
+    "KRA Area",
+    "KPI Name",
+    "Target Expression",
+    "Unit",
+    "Direction",
+    "Target Value",
+    "Warn Threshold",
+    "Critical Threshold",
+    "Frequency",
+    "Measurement Instruction",
+    "Source System",
+    "Source Reference",
+    "Is Team KPI",
+    "Created By",
+    "Created At",
+    "Assignees",
+  ];
+
+  let csv = headers.join(",") + "\n";
+
+  kpiList.forEach((k) => {
+    const row = [
+      csvEscape(kraNameFn(k.kra_area_id)),
+      csvEscape(k.name),
+      csvEscape(k.target_expression || ""),
+      csvEscape(k.unit || ""),
+      csvEscape(formatDirection(k.direction)),
+      k.target_value ?? "",
+      k.warn_threshold ?? "",
+      k.critical_threshold ?? "",
+      csvEscape(cap(k.frequency || "")),
+      csvEscape(k.measurement_instruction || ""),
+      csvEscape(k.source_system || ""),
+      csvEscape(k.source_reference || ""),
+      k.is_team_kpi === 1 || k.is_team_kpi === true ? "Yes" : "No",
+      csvEscape(employeeNameFn(k.created_by)),
+      csvEscape(formatCreatedAt(k.created_at)),
+      csvEscape(assigneeNamesForKpi(k.id, assignments)),
+    ];
+    csv += row.join(",") + "\n";
+  });
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(csv, `Active_KPIs_${dateStamp}.csv`);
+}
+
+/**
+ * Resolve which employee's trend to open on the KPI detail page.
+ * Returns null when the KPI has no assignees (manager/admin should not default to self).
+ */
+function resolveTrendViewUserId(kpiId, {
+  assignments,
+  currentUser,
+  isManager,
+  isAdmin,
+  managerFilter,
+  isTeamKpi,
+  isDirectlyAssigned,
+  teamAssignment,
+}) {
+  const assignedEmployeeIds = assignments
+    .filter((a) => Number(a.kpi_metric_id) === Number(kpiId))
+    .map((a) => Number(a.employee_id));
+
+  // Employees: own id, or team KPI assignee when viewing as team member
+  if (!isManager && !isAdmin) {
+    if (isTeamKpi && !isDirectlyAssigned && teamAssignment) {
+      return Number(teamAssignment.employee_id);
+    }
+    return Number(currentUser.id);
+  }
+
+  // Manager/admin + unassigned KPI: no viewUser — detail page shows unassigned state
+  if (assignedEmployeeIds.length === 0) {
+    return null;
+  }
+
+  if (managerFilter !== "all" && managerFilter !== "self" && assignedEmployeeIds.includes(Number(managerFilter))) {
+    return Number(managerFilter);
+  }
+  if (assignedEmployeeIds.includes(Number(currentUser.id))) {
+    return Number(currentUser.id);
+  }
+  return assignedEmployeeIds[0];
 }

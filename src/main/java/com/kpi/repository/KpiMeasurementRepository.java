@@ -57,4 +57,19 @@ public interface KpiMeasurementRepository extends JpaRepository<KpiMeasurement, 
                      "JOIN FETCH m.measuredBy " +
                      "WHERE m.isPending = true AND m.isDeleted = false ORDER BY m.measuredAt DESC")
        List<KpiMeasurement> findAllPendingWithDetails();
+
+       // Retrieve distinct measurement period labels for report filtering, sorted descending
+       @Query("SELECT DISTINCT m.measurementPeriodLabel FROM KpiMeasurement m " +
+              "WHERE m.isDeleted = false AND m.measurementPeriodLabel IS NOT NULL " +
+              "ORDER BY m.measurementPeriodLabel DESC")
+       List<String> findDistinctPeriodLabels();
+
+       // Retrieve all measurements for a period with details loaded eagerly
+       @Query("SELECT m FROM KpiMeasurement m " +
+              "JOIN FETCH m.kpiMetric km JOIN FETCH km.kraArea " +
+              "JOIN FETCH m.measuredBy " +
+              "WHERE m.measurementPeriodLabel = :periodLabel AND m.isDeleted = false")
+       List<KpiMeasurement> findByMeasurementPeriodLabelWithDetails(@Param("periodLabel") String periodLabel);
 }
+
+
