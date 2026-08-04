@@ -54,7 +54,7 @@ h1,h2,h3,h4{font-weight:600;letter-spacing:-.01em;line-height:1.2}
 .topbar__crumb b{color:var(--ink);font-weight:600}
 .topbar__right{display:flex;align-items:center;gap:1rem}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:.74rem;font-weight:600}
-.content{padding:1.6rem 1.8rem 3rem;max-width:1280px;width:100%}
+.content{padding:1.6rem 1.8rem 3rem;width:100%}
 
 .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.5rem}
 .page-head h1{font-size:1.5rem;margin-bottom:.2rem}
