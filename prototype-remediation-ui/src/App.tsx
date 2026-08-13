@@ -58,6 +58,27 @@ export default function App() {
     );
   };
 
+  const handleDeleteFeedback = (kpiId: string) => {
+    setKpis((prevKpis) =>
+      prevKpis.map((kpi) => {
+        if (kpi.id === kpiId) {
+          let originalRag = kpi.ragStatus;
+          if (kpi.id === 'kpi-fe-build') {
+            originalRag = 'red';
+          }
+          return {
+            ...kpi,
+            feedbackAction: undefined,
+            verificationResult: undefined,
+            verifiedAfterIssueKey: undefined,
+            ragStatus: originalRag,
+          };
+        }
+        return kpi;
+      })
+    );
+  };
+
   const handleKpiClick = (kpi: KpiMeasurement) => {
     setSelectedKpiId(kpi.id);
   };
@@ -93,6 +114,7 @@ export default function App() {
             activeUser={activeUser}
             onClose={() => setSelectedKpiId(null)}
             onSubmitFeedback={handleSubmitFeedback}
+            onDeleteFeedback={handleDeleteFeedback}
           />
         )}
 

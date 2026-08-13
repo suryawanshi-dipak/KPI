@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import type { KpiMeasurement, Employee, KpiFeedbackAction, AuditEntry, JiraStatus } from '../types';
 import { MOCK_HISTORY } from '../mockData';
 
@@ -7,18 +8,27 @@ interface RemediationPanelProps {
   activeUser: Employee;
   onClose: () => void;
   onSubmitFeedback: (kpiId: string, feedback: KpiFeedbackAction, verificationUpdate?: any) => void;
+  onDeleteFeedback: (kpiId: string) => void;
 }
 
 const JIRA_STATUS_CYCLE: JiraStatus[] = ['To Do', 'In Progress', 'Done', 'Rejected'];
 
-export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFeedback }: RemediationPanelProps) {
+export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFeedback, onDeleteFeedback }: RemediationPanelProps) {
   const isHR = activeUser.role === 'ROLE_HR';
   const isEmployee = activeUser.role === 'ROLE_EMPLOYEE';
   const isAdmin = activeUser.role === 'ROLE_ADMIN';
+  const isManager = activeUser.role === 'ROLE_MANAGER';
 
   // Check if Employee can edit (only their own KPIs)
   const isOwner = kpi.employeeId === activeUser.id;
   const isReadOnly = isHR || (isEmployee && !isOwner);
+
+  // Edit / Delete Authorization (FR-FB-08, Section 3.7.2)
+  const canEditOrDelete = !isHR && (isAdmin || isManager || (isEmployee && isOwner));
+
+  // local states for mode switching
+  const [isEditing, setIsEditing] = useState(false);
+  const [isReescalating, setIsReescalating] = useState(false);
 
   // Form State
   const [rootCause, setRootCause] = useState('');
@@ -30,29 +40,31 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Admin override mode
+  // Admin override mode (correct/unlink)
   const [isAdminOverride, setIsAdminOverride] = useState(false);
   const [adminJiraKey, setAdminJiraKey] = useState('');
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
-  // Load existing feedback if present
+  // Load existing feedback or reset states
   useEffect(() => {
-    if (kpi.feedbackAction) {
+    if (kpi.feedbackAction && !isReescalating) {
       setRootCause(kpi.feedbackAction.rootCause);
       setJiraKey(kpi.feedbackAction.linkedJiraIssueKey || '');
       setJiraStatus(kpi.feedbackAction.jiraStatusSnapshot);
       setLastSynced(kpi.feedbackAction.jiraStatusLastSyncedAt);
       setAuditLog(kpi.feedbackAction.auditTrail || []);
-    } else {
+      setIsEditing(false);
+    } else if (!isReescalating) {
       setRootCause('');
       setJiraKey('');
       setJiraStatus(null);
       setLastSynced(null);
       setAuditLog([]);
+      setIsEditing(false);
     }
     setError(null);
     setIsAdminOverride(false);
-  }, [kpi]);
+  }, [kpi, isReescalating]);
 
   // Form validation
   const validateJiraKey = (key: string): boolean => {
@@ -60,8 +72,8 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
     return /^CARIT-\d+$/i.test(key);
   };
 
-  // Submit handler
-  const handleSubmit = (e: React.FormEvent) => {
+  // Submit handler (creates new, edits existing, or logs re-escalation feedback)
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
 
@@ -75,7 +87,7 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
       return;
     }
 
-    // Determine initial Jira status if issue key is provided
+    // Determine Jira status
     let statusSnapshot: JiraStatus | null = null;
     let syncedAt: string | null = null;
     if (jiraKey) {
@@ -83,9 +95,7 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
       syncedAt = lastSynced || new Date().toISOString();
     }
 
-    // Determine verification state update (FR-FB-04)
-    // If there is a Jira key, and it goes to terminal status, we will set verification_result to 'pending' or 'improved'
-    // To keep it simple, if they link a Jira key, it starts 'In progress' unless the status is terminal.
+    // Determine verification state update
     let verificationUpdate: any = {};
     if (jiraKey) {
       if (statusSnapshot === 'Done') {
@@ -96,33 +106,52 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
         verificationUpdate = { verificationResult: undefined };
       }
     } else {
-      // If root cause logged with no Jira key, it is 'no fix tracked' terminal state, which does not run verification
       verificationUpdate = { verificationResult: undefined };
     }
 
+    // If re-escalating, reference the previous feedback ID
+    const previousFeedbackId = isReescalating && kpi.feedbackAction ? kpi.feedbackAction.id : kpi.feedbackAction?.relatedPreviousFeedbackId;
+
     const feedback: KpiFeedbackAction = {
-      id: kpi.feedbackAction?.id || `fb-${Date.now()}`,
+      id: isReescalating ? `fb-${Date.now()}` : (kpi.feedbackAction?.id || `fb-${Date.now()}`),
       kpiMeasurementId: kpi.id,
       rootCause: rootCause.trim(),
       linkedJiraIssueKey: jiraKey.trim() ? jiraKey.trim().toUpperCase() : null,
       jiraStatusSnapshot: statusSnapshot,
       jiraStatusLastSyncedAt: syncedAt,
-      submittedBy: kpi.feedbackAction?.submittedBy || activeUser.name.split(' (')[0],
-      submittedRole: kpi.feedbackAction?.submittedRole || activeUser.role,
+      submittedBy: isReescalating ? activeUser.name.split(' (')[0] : (kpi.feedbackAction?.submittedBy || activeUser.name.split(' (')[0]),
+      submittedRole: isReescalating ? activeUser.role : (kpi.feedbackAction?.submittedRole || activeUser.role),
       auditTrail: auditLog,
-      relatedPreviousFeedbackId: kpi.feedbackAction?.relatedPreviousFeedbackId,
+      relatedPreviousFeedbackId: previousFeedbackId,
     };
 
     onSubmitFeedback(kpi.id, feedback, verificationUpdate);
     setError(null);
-    alert('Remediation feedback successfully logged!');
+    setIsEditing(false);
+    setIsReescalating(false);
+    alert(isReescalating ? 'Re-escalation feedback successfully logged!' : 'Remediation feedback successfully saved!');
+  };
+
+  // Delete handler
+  const handleDelete = () => {
+    if (!canEditOrDelete) return;
+    if (window.confirm('Are you sure you want to delete this remediation feedback? This will completely clear all feedback and reset verification status.')) {
+      onDeleteFeedback(kpi.id);
+      setIsEditing(false);
+      setIsReescalating(false);
+      setRootCause('');
+      setJiraKey('');
+      setJiraStatus(null);
+      setLastSynced(null);
+      setAuditLog([]);
+      alert('Remediation feedback deleted.');
+    }
   };
 
   // Sync Jira Status simulator (FR-FB-03)
   const handleJiraRefresh = () => {
     setIsRefreshing(true);
     setTimeout(() => {
-      // Find next status in cycle
       const currentIdx = jiraStatus ? JIRA_STATUS_CYCLE.indexOf(jiraStatus) : -1;
       const nextIdx = (currentIdx + 1) % JIRA_STATUS_CYCLE.length;
       const nextStatus = JIRA_STATUS_CYCLE[nextIdx];
@@ -132,15 +161,14 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
       setLastSynced(nextSyncedAt);
       setIsRefreshing(false);
 
-      // Trigger state change in parent to persist the refresh status
       if (kpi.feedbackAction) {
         let updatedVerificationResult = kpi.verificationResult;
         if (nextStatus === 'Done') {
-          updatedVerificationResult = 'pending'; // Awaiting verification
+          updatedVerificationResult = 'pending';
         } else if (nextStatus === 'Rejected') {
-          updatedVerificationResult = 'not_verifiable'; // Closed unfixed
+          updatedVerificationResult = 'not_verifiable';
         } else {
-          updatedVerificationResult = undefined; // Clear verification if moved back to To Do / In Progress
+          updatedVerificationResult = undefined;
         }
 
         const updatedFeedback: KpiFeedbackAction = {
@@ -150,7 +178,7 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
         };
         onSubmitFeedback(kpi.id, updatedFeedback, { verificationResult: updatedVerificationResult });
       }
-    }, 800); // Small delay to feel realistic
+    }, 800);
   };
 
   // Administrative correct/unlink Jira key (FR-FB-09)
@@ -165,7 +193,6 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
     const previousKey = jiraKey;
     const newKey = adminJiraKey.trim() ? adminJiraKey.trim().toUpperCase() : null;
     
-    // Create audit trail entry
     const auditEntry: AuditEntry = {
       timestamp: new Date().toISOString(),
       adminName: activeUser.name.split(' (')[0],
@@ -187,7 +214,6 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
       setLastSynced(null);
     }
 
-    // Submit right away
     if (kpi.feedbackAction) {
       const updatedFeedback: KpiFeedbackAction = {
         ...kpi.feedbackAction,
@@ -209,8 +235,17 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
     setIsAdminOverride(false);
   };
 
-  // Get historical measurements for the table
+  // Re-escalation mode initiator (FR-FB-06)
+  const handleInitiateReescalate = () => {
+    setIsReescalating(true);
+    setRootCause('');
+    setJiraKey('');
+    setJiraStatus(null);
+    setLastSynced(null);
+  };
+
   const historyRows = MOCK_HISTORY[kpi.id] || [];
+  const isFailedRemediation = kpi.verificationResult === 'not_improved' || kpi.verificationResult === 'not_verifiable';
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -244,59 +279,182 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
             </div>
           </div>
 
-          {/* Access Banner */}
+          {/* Access Warning Banner */}
           {isReadOnly && (
             <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#475569', padding: '0.6rem 0.85rem', borderRadius: 'var(--r-sm)', fontSize: '0.78rem' }}>
               ℹ️ <strong>Read-only View:</strong> {isHR ? 'HR role has read-only auditor access' : 'You are not the assignee or manager for this KPI'}.
             </div>
           )}
 
-          {/* Root Cause Logging Form */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-            <div className="field">
-              <label htmlFor="root-cause-textarea">
-                Root Cause Explanation <span className="req">*</span>
-              </label>
-              <textarea
-                id="root-cause-textarea"
-                className={`textarea ${error && !rootCause.trim() ? 'invalid' : ''}`}
-                placeholder="Describe why this KPI target was missed (required)..."
-                value={rootCause}
-                onChange={(e) => setRootCause(e.target.value)}
-                disabled={isReadOnly}
-              />
-              <span className="hint">Describe exact technical or operational failure points.</span>
-            </div>
-
-            <div className="field">
-              <label htmlFor="jira-key-input">Linked CarIT Issue Key (Optional)</label>
-              <input
-                id="jira-key-input"
-                type="text"
-                className={`input input--mono ${error && jiraKey && !validateJiraKey(jiraKey) ? 'invalid' : ''}`}
-                placeholder="e.g. CARIT-12345"
-                value={jiraKey}
-                onChange={(e) => setJiraKey(e.target.value)}
-                disabled={isReadOnly || (!!kpi.feedbackAction?.linkedJiraIssueKey && !isAdminOverride)}
-              />
-              <span className="hint">Format: CARIT-##### (must be capitalized).</span>
-            </div>
-
-            {error && (
-              <div className="field-error" style={{ marginTop: '-0.5rem' }}>
-                ⚠️ {error}
+          {/* Re-escalation Failure Notice (Section 3.7.1) */}
+          {isFailedRemediation && !isReescalating && (
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c', padding: '0.8rem 1rem', borderRadius: 'var(--r)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div>
+                <strong>⚠️ Remediation Loop Flagged for Re-escalation:</strong> The previous attempt was marked as{' '}
+                <strong>{kpi.verificationResult === 'not_improved' ? 'Not Improved' : 'Closed Unfixed (Jira Rejected)'}</strong>. A new feedback loop should be initiated.
               </div>
-            )}
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  style={{ alignSelf: 'flex-start', background: '#ea580c', borderColor: '#ea580c', fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                  onClick={handleInitiateReescalate}
+                >
+                  🚀 Initiate Re-escalation Feedback
+                </button>
+              )}
+            </div>
+          )}
 
-            {!isReadOnly && (!kpi.feedbackAction || isAdminOverride) && (
-              <button type="submit" className="btn btn--primary" style={{ alignSelf: 'flex-start' }}>
-                Save Remediation Record
-              </button>
-            )}
-          </form>
+          {/* Render Flow: Form, Logged Summary, or Re-escalation setup */}
 
-          {/* Jira Status Strip (FR-FB-03) */}
-          {kpi.feedbackAction && kpi.feedbackAction.linkedJiraIssueKey && (
+          {/* CASE 1: Form is shown (either creating new, editing existing, or writing re-escalation feedback) */}
+          {(!kpi.feedbackAction || isEditing || isReescalating) ? (
+            <div className="card">
+              <div className="card__head">
+                <h3>
+                  {isReescalating
+                    ? 'Log Re-escalation Feedback (Iterative Loop)'
+                    : isEditing
+                    ? 'Edit Remediation Feedback'
+                    : 'Log Remediation Feedback'}
+                </h3>
+                {isReescalating && (
+                  <span className="pill pill--red" style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}>
+                    Iteration 2+
+                  </span>
+                )}
+              </div>
+              <div className="card__body">
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                  <div className="field">
+                    <label htmlFor="root-cause-textarea">
+                      Root Cause Explanation <span className="req">*</span>
+                    </label>
+                    <textarea
+                      id="root-cause-textarea"
+                      className={`textarea ${error && !rootCause.trim() ? 'invalid' : ''}`}
+                      placeholder="Describe why this KPI target was missed (required)..."
+                      value={rootCause}
+                      onChange={(e) => setRootCause(e.target.value)}
+                      disabled={isReadOnly}
+                    />
+                    <span className="hint">Describe exact technical or operational failure points.</span>
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="jira-key-input">Linked CarIT Issue Key (Optional)</label>
+                    <input
+                      id="jira-key-input"
+                      type="text"
+                      className={`input input--mono ${error && jiraKey && !validateJiraKey(jiraKey) ? 'invalid' : ''}`}
+                      placeholder="e.g. CARIT-12345"
+                      value={jiraKey}
+                      onChange={(e) => setJiraKey(e.target.value)}
+                      disabled={isReadOnly}
+                    />
+                    <span className="hint">Format: CARIT-##### (must be capitalized).</span>
+                  </div>
+
+                  {error && (
+                    <div className="field-error" style={{ marginTop: '-0.5rem' }}>
+                      ⚠️ {error}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button type="submit" className="btn btn--primary">
+                      {isReescalating ? 'Submit Re-escalation' : isEditing ? 'Save Changes' : 'Save Remediation'}
+                    </button>
+                    {isEditing && (
+                      <button type="button" className="btn" onClick={() => setIsEditing(false)}>
+                        Cancel Edit
+                      </button>
+                    )}
+                    {isReescalating && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => {
+                          setIsReescalating(false);
+                          setError(null);
+                        }}
+                      >
+                        Cancel Re-escalation
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : (
+            /* CASE 2: Feedback is logged and not in edit/reescalation form, show nicely formatted card */
+            <div className="card" style={{ borderLeft: '4px solid var(--primary)' }}>
+              <div className="card__head" style={{ padding: '0.85rem 1.25rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h3 style={{ fontWeight: 600 }}>Logged Remediation Feedback</h3>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
+                    Logged by {kpi.feedbackAction.submittedBy} ({kpi.feedbackAction.submittedRole.replace('ROLE_', '')})
+                  </span>
+                </div>
+                {canEditOrDelete && (
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      className="btn"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.76rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                      onClick={() => {
+                        setIsEditing(true);
+                        setError(null);
+                      }}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      className="btn btn--danger"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.76rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                      onClick={handleDelete}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', display: 'block', marginBottom: '0.2rem' }}>
+                    Root Cause:
+                  </strong>
+                  <p style={{ fontSize: '0.86rem', lineHeight: '1.4', whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>
+                    {kpi.feedbackAction.rootCause}
+                  </p>
+                </div>
+                
+                <div>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', display: 'block', marginBottom: '0.2rem' }}>
+                    Jira Issue Link:
+                  </strong>
+                  {kpi.feedbackAction.linkedJiraIssueKey ? (
+                    <span className="mono" style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--primary)' }}>
+                      {kpi.feedbackAction.linkedJiraIssueKey}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--muted)', fontSize: '0.82rem', fontStyle: 'italic' }}>
+                      No Jira issue tracked (Root cause only)
+                    </span>
+                  )}
+                </div>
+
+                {kpi.feedbackAction.relatedPreviousFeedbackId && (
+                  <div style={{ background: 'var(--surface-2)', padding: '0.4rem 0.6rem', borderRadius: '4px', borderLeft: '2px solid #ea580c', fontSize: '0.74rem' }}>
+                    🔄 <strong>Iterative Loop:</strong> This feedback was logged as a re-escalation referencing previous attempt ID <code>{kpi.feedbackAction.relatedPreviousFeedbackId}</code>.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Jira Status Strip (FR-FB-03) - only when there is a linked issue and not in re-escalation entry mode */}
+          {kpi.feedbackAction && kpi.feedbackAction.linkedJiraIssueKey && !isReescalating && (
             <div className="jira-strip">
               <div className="jira-strip__header">
                 <span>Linked Jira Issue</span>
@@ -346,8 +504,8 @@ export default function RemediationPanel({ kpi, activeUser, onClose, onSubmitFee
             </div>
           )}
 
-          {/* Admin Unlink / Correct Panel (FR-FB-09) */}
-          {isAdmin && kpi.feedbackAction && (
+          {/* Admin Unlink / Correct Panel (FR-FB-09) - only shown when not in re-escalation input mode */}
+          {isAdmin && kpi.feedbackAction && !isReescalating && (
             <div className="admin-audit-section">
               <div className="admin-audit-section__title">🛡️ Admin Controls (FR-FB-09)</div>
               
