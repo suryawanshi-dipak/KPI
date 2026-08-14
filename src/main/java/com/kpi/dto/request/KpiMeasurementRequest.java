@@ -48,12 +48,15 @@ public class KpiMeasurementRequest {
 
     @NotNull(message = "Measured by employee is required")
     private Integer measuredById;
+    @NotNull
+    private Integer subjectEmployeeId; // Added field for subject employee ID
 
     private Boolean isSystemGenerated;
 
     private Boolean isPending;
 
     private String pendingReason;
+
 
     // When submitting a correction, reference the original measurement
     private Long correctedFromId;

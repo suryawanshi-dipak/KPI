@@ -95,6 +95,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .postAction(request.getPostAction())
                 .measuredAt(LocalDateTime.now())
                 .measuredBy(measuredBy)
+                .subjectEmployeeId(request.getSubjectEmployeeId())
                 .isSystemGenerated(request.getIsSystemGenerated() != null ? request.getIsSystemGenerated() : false)
                 .isPending(request.getIsPending() != null ? request.getIsPending() : false)
                 .pendingReason(request.getPendingReason())
@@ -133,6 +134,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
         measurement.setRawPayload(request.getRawPayload());
         measurement.setPostAction(request.getPostAction());
         measurement.setMeasuredBy(measuredBy);
+        measurement.setSubjectEmployeeId(request.getSubjectEmployeeId());
         if (request.getIsSystemGenerated() != null) measurement.setIsSystemGenerated(request.getIsSystemGenerated());
         if (request.getIsPending() != null) measurement.setIsPending(request.getIsPending());
         measurement.setPendingReason(request.getPendingReason());

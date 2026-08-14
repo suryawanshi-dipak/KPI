@@ -69,6 +69,10 @@ public class KpiMeasurement {
     @JoinColumn(name = "measured_by", nullable = false)
     private Employee measuredBy;
 
+
+     @Column(name = "subject_employee_id", nullable = false)
+    private Integer subjectEmployeeId;
+
     // @Builder.Default is required — Lombok's @Builder ignores field initializers without it
     @Column(name = "is_system_generated")
     @Builder.Default
@@ -121,4 +125,8 @@ public class KpiMeasurement {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+
+    public Integer getSubjectEmployeeId() { return subjectEmployeeId; }
+    public void setSubjectEmployeeId(Integer subjectEmployeeId) { this.subjectEmployeeId = subjectEmployeeId; }
 }

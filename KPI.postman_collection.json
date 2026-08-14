@@ -15,6 +15,26 @@
       "key": "token",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "kpiMeasurementId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "verificationMeasurementId",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "submittedBy",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "feedbackActionId",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -942,6 +962,80 @@
               "body": "{\n  \"success\": false,\n  \"message\": \"Approved reviews cannot be deleted\",\n  \"timestamp\": \"2026-06-13T10:00:00\"\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "KPI Feedback Actions",
+      "description": "Feedback and remediation APIs. Run Create feedback action first; its test script stores the generated ID in feedbackActionId.",
+      "item": [
+        {
+          "name": "Create feedback action",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 201 Created', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('feedbackActionId', pm.response.json().data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kpiMeasurementId\": {{kpiMeasurementId}},\n  \"rootCauseSummary\": \"Release validation did not cover the affected regression scenario.\",\n  \"linkedJiraIssueKey\": \"KPI-101\",\n  \"submittedBy\": {{submittedBy}},\n  \"jiraStatusSnapshot\": \"In Progress\",\n  \"verificationResult\": \"pending\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/kpi-feedback-actions"
+          }
+        },
+        {
+          "name": "List feedback actions",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/kpi-feedback-actions" }
+        },
+        {
+          "name": "List actions by source measurement",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/kpi-feedback-actions?kpiMeasurementId={{kpiMeasurementId}}" }
+        },
+        {
+          "name": "Get feedback action by ID",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}" }
+        },
+        {
+          "name": "Update Jira status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jiraStatusSnapshot\": \"Done\",\n  \"jiraResolvedAt\": \"2026-08-14T16:00:00\",\n  \"jiraResolutionCategory\": \"fixed\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}/jira-status"
+          }
+        },
+        {
+          "name": "Record verification result",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationResult\": \"improved\",\n  \"verificationKpiMeasurementId\": {{verificationMeasurementId}}\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}/verification"
+          }
+        },
+        {
+          "name": "List actions by verification result",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/kpi-feedback-actions?verificationResult=improved" }
+        },
+        {
+          "name": "Soft delete feedback action",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}" }
         }
       ]
     }
