@@ -6,15 +6,18 @@ import com.kpi.dto.request.KpiFeedbackActionRequest;
 import com.kpi.dto.response.KpiFeedbackActionResponse;
 import com.kpi.entity.Employee;
 import com.kpi.entity.KpiFeedbackAction;
+import com.kpi.entity.KpiFeedbackActionAudit;
 import com.kpi.entity.KpiMeasurement;
 import com.kpi.exception.BadRequestException;
 import com.kpi.exception.ResourceNotFoundException;
 import com.kpi.repository.EmployeeRepository;
+import com.kpi.repository.KpiFeedbackActionAuditRepository;
 import com.kpi.repository.KpiFeedbackActionRepository;
 import com.kpi.repository.KpiMeasurementRepository;
 import com.kpi.service.KpiFeedbackActionService;
 import com.kpi.util.EmployeeUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     private final KpiFeedbackActionRepository feedbackActionRepository;
     private final KpiMeasurementRepository measurementRepository;
     private final EmployeeRepository employeeRepository;
+    private final KpiFeedbackActionAuditRepository auditRepository;
 
     /** Returns all active feedback actions, ordered by their submission time. */
     @Override
@@ -75,6 +79,18 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     @Override
     @Transactional
     public KpiFeedbackActionResponse create(KpiFeedbackActionRequest request) {
+        checkWriteAccess(request.getKpiMeasurementId(), "CREATE");
+
+        // Reject if active feedback already exists for this measurement
+        List<KpiFeedbackAction> existing = feedbackActionRepository
+                .findByKpiMeasurementIdAndIsDeletedFalseOrderBySubmittedAtDesc(request.getKpiMeasurementId());
+        if (!existing.isEmpty()) {
+            throw new BadRequestException("An active feedback action already exists for this KPI measurement");
+        }
+
+        // Validate Jira issue key format if non-null
+        validateJiraKey(request.getLinkedJiraIssueKey());
+
         validateRequestReferences(request, null);
 
         LocalDateTime now = LocalDateTime.now();
@@ -89,7 +105,10 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedBy(actorId != null ? actorId : request.getSubmittedBy());
         action.setIsDeleted(false);
 
-        return toResponse(feedbackActionRepository.save(action));
+        KpiFeedbackAction saved = feedbackActionRepository.save(action);
+        saveAudit(saved, "CREATE");
+
+        return toResponse(saved);
     }
 
     /** Fully updates an active feedback action using the same validations as creation. */
@@ -97,6 +116,11 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     @Transactional
     public KpiFeedbackActionResponse update(Long id, KpiFeedbackActionRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
+        checkWriteAccess(action.getKpiMeasurementId(), "UPDATE");
+
+        // Validate Jira issue key format if non-null
+        validateJiraKey(request.getLinkedJiraIssueKey());
+
         validateRequestReferences(request, id);
 
         applyRequest(action, request);
@@ -104,7 +128,10 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedAt(LocalDateTime.now());
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
-        return toResponse(feedbackActionRepository.save(action));
+        KpiFeedbackAction saved = feedbackActionRepository.save(action);
+        saveAudit(saved, "UPDATE");
+
+        return toResponse(saved);
     }
 
     /** Stores a Jira status snapshot without requiring a client to resubmit the complete action. */
@@ -112,6 +139,8 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     @Transactional
     public KpiFeedbackActionResponse updateJiraStatus(Long id, JiraStatusUpdateRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
+        checkWriteAccess(action.getKpiMeasurementId(), "UPDATE_JIRA");
+
         action.setJiraStatusSnapshot(request.getJiraStatusSnapshot());
         action.setJiraStatusLastSyncedAt(
                 request.getJiraStatusLastSyncedAt() != null ? request.getJiraStatusLastSyncedAt() : LocalDateTime.now());
@@ -120,7 +149,10 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedAt(LocalDateTime.now());
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
-        return toResponse(feedbackActionRepository.save(action));
+        KpiFeedbackAction saved = feedbackActionRepository.save(action);
+        saveAudit(saved, "JIRA_UPDATE");
+
+        return toResponse(saved);
     }
 
     /** Records the post-remediation KPI verification result and optional evidence measurement. */
@@ -128,6 +160,8 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     @Transactional
     public KpiFeedbackActionResponse recordVerification(Long id, FeedbackVerificationRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
+        checkWriteAccess(action.getKpiMeasurementId(), "VERIFY");
+
         validateVerificationReference(request.getVerificationResult(), request.getVerificationKpiMeasurementId());
 
         action.setVerificationResult(request.getVerificationResult());
@@ -137,7 +171,10 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedAt(LocalDateTime.now());
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
-        return toResponse(feedbackActionRepository.save(action));
+        KpiFeedbackAction saved = feedbackActionRepository.save(action);
+        saveAudit(saved, "VERIFY");
+
+        return toResponse(saved);
     }
 
     /** Soft deletes the action so remediation history remains available in the database. */
@@ -145,10 +182,74 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     @Transactional
     public void delete(Long id) {
         KpiFeedbackAction action = findOrThrow(id);
+        checkWriteAccess(action.getKpiMeasurementId(), "DELETE");
+
         action.setIsDeleted(true);
         action.setUpdatedAt(LocalDateTime.now());
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
-        feedbackActionRepository.save(action);
+
+        KpiFeedbackAction saved = feedbackActionRepository.save(action);
+        saveAudit(saved, "DELETE");
+    }
+
+    /** Helper to validate Jira Issue Key regex pattern */
+    private void validateJiraKey(String key) {
+        if (key != null && !key.trim().isEmpty()) {
+            if (!key.matches("^[A-Z]+-\\d+$")) {
+                throw new BadRequestException("Invalid Jira issue key format");
+            }
+        }
+    }
+
+    /** Helper to check RBAC write access for feedback actions */
+    private void checkWriteAccess(Long measurementId, String operation) {
+        KpiMeasurement measurement = measurementRepository.findById(measurementId)
+                .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", measurementId));
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Not authenticated");
+        }
+        String email = authentication.getName();
+        Employee currentUser = employeeRepository.findByEmail(email)
+                .orElseThrow(() -> new AccessDeniedException("Current user not found"));
+
+        if (currentUser.getRole() == com.kpi.entity.enums.Role.admin) {
+            return; // Admin unrestricted
+        }
+
+        if (currentUser.getRole() == com.kpi.entity.enums.Role.hr) {
+            throw new AccessDeniedException("HR role is read-only");
+        }
+
+        if (currentUser.getRole() == com.kpi.entity.enums.Role.employee) {
+            if (!currentUser.getId().equals(measurement.getSubjectEmployeeId())) {
+                throw new AccessDeniedException("Employees can only submit/edit feedback for their own measurements");
+            }
+        } else if (currentUser.getRole() == com.kpi.entity.enums.Role.manager) {
+            if (currentUser.getId().equals(measurement.getSubjectEmployeeId())) {
+                return;
+            }
+            Employee subjectEmp = employeeRepository.findById(measurement.getSubjectEmployeeId()).orElse(null);
+            boolean isDirectReport = subjectEmp != null && subjectEmp.getManager() != null && currentUser.getId().equals(subjectEmp.getManager().getId());
+            if (!isDirectReport) {
+                throw new AccessDeniedException("Managers can only submit/edit feedback for their direct reports' measurements");
+            }
+        } else {
+            throw new AccessDeniedException("Role not authorized");
+        }
+    }
+
+    /** Helper to write audit snapshots */
+    private void saveAudit(KpiFeedbackAction action, String actionType) {
+        KpiFeedbackActionAudit audit = new KpiFeedbackActionAudit();
+        audit.setKpiFeedbackActionId(action.getId());
+        audit.setRootCauseSummary(action.getRootCauseSummary());
+        audit.setLinkedJiraIssueKey(action.getLinkedJiraIssueKey());
+        audit.setActionType(actionType);
+        audit.setChangedBy(resolveCurrentUserEmployeeId());
+        audit.setChangedAt(LocalDateTime.now());
+        auditRepository.save(audit);
     }
 
     /** Copies the editable full-request fields to an existing or new entity. */
@@ -255,3 +356,4 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
                 .build();
     }
 }
+

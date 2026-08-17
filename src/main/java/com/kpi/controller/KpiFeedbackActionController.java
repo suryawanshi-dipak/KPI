@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.kpi.service.JiraSyncService;
 import java.util.List;
 
 /** REST endpoints for the KPI feedback and remediation-action workflow. */
@@ -31,6 +32,7 @@ import java.util.List;
 public class KpiFeedbackActionController {
 
     private final KpiFeedbackActionService feedbackActionService;
+    private final JiraSyncService jiraSyncService;
 
     /** Lists active actions; either optional filter can be used for targeted Postman tests. */
     @GetMapping
@@ -79,6 +81,13 @@ public class KpiFeedbackActionController {
                 ApiResponse.success("Jira status updated successfully", feedbackActionService.updateJiraStatus(id, request)));
     }
 
+    /** Outbound on-demand Jira status synchronization for feedback action. */
+    @PostMapping("/{id}/refresh-jira-status")
+    public ResponseEntity<ApiResponse<KpiFeedbackActionResponse>> refreshJiraStatus(@PathVariable Long id) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Jira status refreshed successfully", jiraSyncService.syncJiraStatus(id)));
+    }
+
     /** Records the verification outcome after remediation work has been carried out. */
     @PatchMapping("/{id}/verification")
     public ResponseEntity<ApiResponse<KpiFeedbackActionResponse>> recordVerification(
@@ -94,3 +103,4 @@ public class KpiFeedbackActionController {
         return ResponseEntity.ok(ApiResponse.success("KPI feedback action deleted successfully", null));
     }
 }
+

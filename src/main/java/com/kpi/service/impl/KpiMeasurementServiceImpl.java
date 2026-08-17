@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import org.springframework.context.ApplicationEventPublisher;
+import com.kpi.event.KpiMeasurementCreatedEvent;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -27,6 +30,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
     private final KpiMeasurementRepository measurementRepository;
     private final KpiMetricRepository kpiMetricRepository;
     private final EmployeeRepository employeeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public List<KpiMeasurementResponse> getAll() {
@@ -80,6 +84,8 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee measuredBy = employeeRepository.findById(request.getMeasuredById())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getMeasuredById()));
+        Employee subjectEmployee = employeeRepository.findById(request.getSubjectEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getSubjectEmployeeId()));
 
         KpiMeasurement.KpiMeasurementBuilder builder = KpiMeasurement.builder()
                 .kpiMetric(metric)
@@ -95,7 +101,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .postAction(request.getPostAction())
                 .measuredAt(LocalDateTime.now())
                 .measuredBy(measuredBy)
-                .subjectEmployeeId(request.getSubjectEmployeeId())
+                .subjectEmployeeId(subjectEmployee.getId())
                 .isSystemGenerated(request.getIsSystemGenerated() != null ? request.getIsSystemGenerated() : false)
                 .isPending(request.getIsPending() != null ? request.getIsPending() : false)
                 .pendingReason(request.getPendingReason())
@@ -109,8 +115,11 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
             builder.correctedFrom(original).isCorrected(true);
         }
 
-        return toResponse(measurementRepository.save(builder.build()));
+        KpiMeasurement saved = measurementRepository.save(builder.build());
+        eventPublisher.publishEvent(new KpiMeasurementCreatedEvent(saved.getId()));
+        return toResponse(saved);
     }
+
 
     @Override
     @Transactional
@@ -121,6 +130,8 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .orElseThrow(() -> new ResourceNotFoundException("KPI Metric", request.getKpiMetricId()));
         Employee measuredBy = employeeRepository.findById(request.getMeasuredById())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getMeasuredById()));
+        Employee subjectEmployee = employeeRepository.findById(request.getSubjectEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Employee", request.getSubjectEmployeeId()));
 
         measurement.setKpiMetric(metric);
         measurement.setKpiMetricVersion(metric.getVersion());
@@ -134,7 +145,7 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
         measurement.setRawPayload(request.getRawPayload());
         measurement.setPostAction(request.getPostAction());
         measurement.setMeasuredBy(measuredBy);
-        measurement.setSubjectEmployeeId(request.getSubjectEmployeeId());
+        measurement.setSubjectEmployeeId(subjectEmployee.getId());
         if (request.getIsSystemGenerated() != null) measurement.setIsSystemGenerated(request.getIsSystemGenerated());
         if (request.getIsPending() != null) measurement.setIsPending(request.getIsPending());
         measurement.setPendingReason(request.getPendingReason());
@@ -188,6 +199,8 @@ public class KpiMeasurementServiceImpl implements KpiMeasurementService {
                 .measuredAt(m.getMeasuredAt())
                 .measuredById(m.getMeasuredBy().getId())
                 .measuredByName(EmployeeUtils.resolveName(m.getMeasuredBy()))
+                .subjectEmployeeId(m.getSubjectEmployeeId())
+                .subjectEmployeeName(m.getSubjectEmployeeId() != null ? EmployeeUtils.resolveName(employeeRepository.findById(m.getSubjectEmployeeId()).orElse(null)) : null)
                 .isSystemGenerated(m.getIsSystemGenerated())
                 .isPending(m.getIsPending())
                 .pendingReason(m.getPendingReason())

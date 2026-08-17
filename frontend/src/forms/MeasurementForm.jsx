@@ -15,6 +15,7 @@ const BLANK = {
   raw_payload: "",
   post_action: "",
   measured_by: "",
+  subject_employee_id: "",
   is_pending: 0,
   pending_reason: "",
 };
@@ -40,6 +41,11 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (currentUser && !form.measured_by) {
       setTimeout(() => {
         setForm((f) => ({ ...f, measured_by: currentUser.id }));
+      }, 0);
+    }
+    if (currentUser && !form.subject_employee_id) {
+      setTimeout(() => {
+        setForm((f) => ({ ...f, subject_employee_id: currentUser.id }));
       }, 0);
     }
   }, [currentUser]); // eslint-disable-line
@@ -189,11 +195,20 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (form.period_start_date && form.period_end_date && form.period_end_date < form.period_start_date)
       e.period_end_date = "End date can't be before start date.";
     
+    if (!form.subject_employee_id) {
+      e.subject_employee_id = "Select the employee being measured.";
+    } else if (currentUser?.role === "manager" || currentUser?.role === "admin") {
+      const isAssigned = assignments.some(
+        (a) => Number(a.employee_id) === Number(form.subject_employee_id) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
+      );
+      if (!isAssigned) {
+        e.subject_employee_id = "The selected employee is not assigned to this KPI.";
+      }
+    }
+
     if (!form.measured_by) {
       e.measured_by = "Select who recorded this.";
     } else if (currentUser?.role === "manager" || currentUser?.role === "admin") {
-      // Validate that the chosen user is actually assigned to the KPI before recording a measurement.
-      // This applies to both managers and admins under the restricted selector.
       const isAssigned = assignments.some(
         (a) => Number(a.employee_id) === Number(form.measured_by) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
       );
@@ -217,6 +232,7 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
       kpi_metric_version: kpi?.version ?? 1,
       measured_value: form.is_pending ? null : Number(form.measured_value),
       measured_by: Number(form.measured_by),
+      subject_employee_id: Number(form.subject_employee_id),
       status: form.is_pending ? "unknown" : previewStatus,
     });
   }
@@ -303,15 +319,12 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
           <input className="input" type="date" value={form.period_end_date || ""} onChange={set("period_end_date")} />
         </Field>
 
-        <Field label="Recorded by" required error={errors.measured_by}>
-          <select className={`select ${errors.measured_by ? "invalid" : ""}`}
-            value={form.measured_by} onChange={set("measured_by")}
+        <Field label="Employee being measured" required error={errors.subject_employee_id}>
+          <select className={`select ${errors.subject_employee_id ? "invalid" : ""}`}
+            value={form.subject_employee_id} onChange={set("subject_employee_id")}
             disabled={currentUser?.role === "employee"}>
-            <option value="">Select person…</option>
+            <option value="">Select employee…</option>
             {filteredPeople.map((p) => {
-              // Determine if this team member is unassigned to the current KPI being measured.
-              // If they are not assigned, we disable their option to prevent managers from recording
-              // measurements on their behalf, while keeping them visible in the list.
               const isDisabled = isPersonDisabledForKpi(p.id);
               return (
                 <option key={p.id} value={p.id} disabled={isDisabled}>
@@ -320,8 +333,22 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
               );
             })}
           </select>
+        </Field>
 
-          {/* (Admin helper UI banner/Assign button removed as per Option B) */}
+        <Field label="Recorded by" required error={errors.measured_by}>
+          <select className={`select ${errors.measured_by ? "invalid" : ""}`}
+            value={form.measured_by} onChange={set("measured_by")}
+            disabled={currentUser?.role === "employee"}>
+            <option value="">Select person…</option>
+            {filteredPeople.map((p) => {
+              const isDisabled = isPersonDisabledForKpi(p.id);
+              return (
+                <option key={p.id} value={p.id} disabled={isDisabled}>
+                  {p.name}
+                </option>
+              );
+            })}
+          </select>
         </Field>
 
         <div className="field">

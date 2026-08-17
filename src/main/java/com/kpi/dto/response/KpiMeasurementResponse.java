@@ -46,6 +46,9 @@ public class KpiMeasurementResponse {
     private Integer measuredById;
     private String measuredByName;
 
+    private Integer subjectEmployeeId;
+    private String subjectEmployeeName;
+
     private Boolean isSystemGenerated;
     private Boolean isPending;
     private String pendingReason;
