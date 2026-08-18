@@ -10,6 +10,7 @@ const NAV = [
   { to: "/kras", label: "KRA Areas", icon: Icon.kra },
   { to: "/measurements", label: "Measurements", icon: Icon.measure },
   { to: "/team", label: "Team", icon: Icon.team },
+  { to: "/feedbacks", label: "KPI Feedbacks", icon: Icon.feedback },
 ];
 const ADMIN_NAV = [
   { to: "/employees", label: "Employees", icon: Icon.team },

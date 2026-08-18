@@ -1444,3 +1444,210 @@ export async function getKpiHealthReport(periodLabel) {
   }
 }
 
+/* ────────────────────────────────────────────────────────────
+   KPI FEEDBACK ACTIONS API INTEGRATION
+   Handles backend requests for creating, editing, deleting, 
+   syncing, and verifying KPI feedback remediation actions.
+   ──────────────────────────────────────────────────────────── */
+
+/**
+ * Fetch all active feedback actions from the backend.
+ * Supports optional filtering by kpiMeasurementId or verificationResult.
+ */
+export async function listFeedbackActions(kpiMeasurementId = null, verificationResult = null) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    let url = `${API_BASE}/kpi-feedback-actions`;
+    const params = [];
+    if (kpiMeasurementId !== null) {
+      params.push(`kpiMeasurementId=${kpiMeasurementId}`);
+    }
+    if (verificationResult !== null) {
+      params.push(`verificationResult=${verificationResult}`);
+    }
+    if (params.length > 0) {
+      url += `?${params.join("&")}`;
+    }
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to fetch feedback actions");
+    }
+    const json = await res.json();
+    return json.data || [];
+  } catch (err) {
+    console.error("listFeedbackActions error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch a single feedback action by its ID.
+ */
+export async function getFeedbackActionById(id) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/kpi-feedback-actions/${id}`, { headers });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || `Failed to fetch feedback action ${id}`);
+    }
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("getFeedbackActionById error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Save feedback action (either create new or edit existing).
+ * Performs validation checks and maps payload to matching Spring DTO structure.
+ */
+export async function saveFeedbackAction(payload) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const isEdit = !!payload.id;
+    const url = isEdit
+      ? `${API_BASE}/kpi-feedback-actions/${payload.id}`
+      : `${API_BASE}/kpi-feedback-actions`;
+    const method = isEdit ? "PUT" : "POST";
+
+    // Map request DTO structure matching KpiFeedbackActionRequest.java
+    const backendPayload = {
+      kpiMeasurementId: Number(payload.kpiMeasurementId),
+      rootCauseSummary: payload.rootCauseSummary,
+      linkedJiraIssueKey: payload.linkedJiraIssueKey ? payload.linkedJiraIssueKey.trim().toUpperCase() : null,
+      submittedBy: Number(payload.submittedBy),
+      jiraStatusSnapshot: payload.jiraStatusSnapshot || null,
+      verificationResult: payload.verificationResult || null,
+      relatedPreviousFeedbackId: payload.relatedPreviousFeedbackId ? Number(payload.relatedPreviousFeedbackId) : null
+    };
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(backendPayload),
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to save feedback action");
+    }
+
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("saveFeedbackAction error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Soft delete a feedback action. Preserves audit history on the backend.
+ */
+export async function deleteFeedbackAction(id) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/kpi-feedback-actions/${id}`, {
+      method: "DELETE",
+      headers,
+    });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to delete feedback action");
+    }
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("deleteFeedbackAction error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Trigger outbound synchronization to retrieve fresh status from Jira Cloud (or mock Jira).
+ * Uses configuration values mapped on the Spring Boot backend.
+ */
+export async function refreshJiraStatus(id) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/kpi-feedback-actions/${id}/refresh-jira-status`, {
+      method: "POST",
+      headers,
+    });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to sync Jira ticket status");
+    }
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("refreshJiraStatus error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Update Jira status fields snapshot (standalone request).
+ */
+export async function updateJiraStatus(id, payload) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/kpi-feedback-actions/${id}/jira-status`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        jiraStatusSnapshot: payload.jiraStatusSnapshot,
+        jiraResolvedAt: payload.jiraResolvedAt || null,
+        jiraResolutionCategory: payload.jiraResolutionCategory || null,
+      }),
+    });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to update Jira status");
+    }
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("updateJiraStatus error:", err);
+    throw err;
+  }
+}
+
+/**
+ * Record post-remediation verification outcome on the feedback action.
+ */
+export async function recordVerification(id, payload) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  try {
+    const res = await fetch(`${API_BASE}/kpi-feedback-actions/${id}/verification`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        verificationResult: payload.verificationResult,
+        verificationKpiMeasurementId: payload.verificationKpiMeasurementId ? Number(payload.verificationKpiMeasurementId) : null,
+        verificationCheckedAt: payload.verificationCheckedAt || null,
+      }),
+    });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Failed to save verification result");
+    }
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.error("recordVerification error:", err);
+    throw err;
+  }
+}
+
+

@@ -7,6 +7,7 @@ import Measurements from "./pages/Measurements";
 import Team from "./pages/Team";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
+import Feedbacks from "./pages/Feedbacks";
 import LoginScreen from "./pages/LoginScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
         <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+        <Route path="/feedbacks" element={<ProtectedRoute><Feedbacks /></ProtectedRoute>} />
         <Route path="/login" element={<LoginScreen />} />
         <Route path="/index.html" element={<Navigate to="/" replace />} />
       </Routes>
