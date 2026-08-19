@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class VerificationServiceImpl implements VerificationService {
@@ -79,6 +81,7 @@ public class VerificationServiceImpl implements VerificationService {
                 newMeasurement.getPeriodStartDate());
 
         for (KpiFeedbackAction action : unverifiedActions) {
+            Map<String, Object> oldValues = snapshotOf(action);
             KpiMeasurement priorMeasurement = measurementRepository.findById(action.getKpiMeasurementId()).orElse(null);
             if (priorMeasurement == null) {
                 continue;
@@ -111,22 +114,46 @@ public class VerificationServiceImpl implements VerificationService {
             action.setVerificationKpiMeasurementId(newMeasurement.getId());
             action.setVerificationCheckedAt(LocalDateTime.now());
             action.setUpdatedAt(LocalDateTime.now());
-            // System-generated stamps can leave updated_by NULL to distinguish from human edits
-            action.setUpdatedBy(null);
+            // The audit table requires a non-null actor, so retain the employee who last updated the action.
+            Integer changedBy = action.getUpdatedBy() != null ? action.getUpdatedBy() : action.getCreatedBy();
+            action.setUpdatedBy(changedBy);
 
             feedbackActionRepository.save(action);
             log.info("Action {} verified as {}", action.getId(), action.getVerificationResult());
 
-            // Write an audit snapshot
+            if (changedBy == null) {
+                throw new IllegalStateException("Cannot audit an automated verification without an employee ID");
+            }
+
+            // Write an audit snapshot using the database table's JSON columns.
             KpiFeedbackActionAudit audit = new KpiFeedbackActionAudit();
-            audit.setKpiFeedbackActionId(action.getId());
-            audit.setRootCauseSummary(action.getRootCauseSummary());
-            audit.setLinkedJiraIssueKey(action.getLinkedJiraIssueKey());
-            audit.setActionType("SYSTEM_VERIFY");
-            audit.setChangedBy(null);
+            audit.setFeedbackActionId(action.getId());
+            audit.setOldValues(oldValues);
+            audit.setNewValues(snapshotOf(action));
+            audit.setChangeType(KpiFeedbackActionAudit.ChangeType.VERIFICATION);
+            audit.setChangedBy(changedBy);
             audit.setChangedAt(LocalDateTime.now());
             auditRepository.save(audit);
         }
+    }
+
+    private Map<String, Object> snapshotOf(KpiFeedbackAction action) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("kpiMeasurementId", action.getKpiMeasurementId());
+        snapshot.put("rootCauseSummary", action.getRootCauseSummary());
+        snapshot.put("linkedJiraIssueKey", action.getLinkedJiraIssueKey());
+        snapshot.put("submittedBy", action.getSubmittedBy());
+        snapshot.put("submittedAt", action.getSubmittedAt());
+        snapshot.put("jiraStatusSnapshot", action.getJiraStatusSnapshot());
+        snapshot.put("jiraStatusLastSyncedAt", action.getJiraStatusLastSyncedAt());
+        snapshot.put("jiraResolvedAt", action.getJiraResolvedAt());
+        snapshot.put("jiraResolutionCategory", action.getJiraResolutionCategory());
+        snapshot.put("verificationResult", action.getVerificationResult());
+        snapshot.put("verificationKpiMeasurementId", action.getVerificationKpiMeasurementId());
+        snapshot.put("verificationCheckedAt", action.getVerificationCheckedAt());
+        snapshot.put("relatedPreviousFeedbackId", action.getRelatedPreviousFeedbackId());
+        snapshot.put("isDeleted", action.getIsDeleted());
+        return snapshot;
     }
 
     private int getStatusRank(MeasurementStatus status) {

@@ -24,7 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Implements the feedback/remediation workflow while keeping database integrity checks
@@ -106,7 +108,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setIsDeleted(false);
 
         KpiFeedbackAction saved = feedbackActionRepository.save(action);
-        saveAudit(saved, "CREATE");
+        saveAudit(saved, null, KpiFeedbackActionAudit.ChangeType.CREATE, saved.getCreatedBy());
 
         return toResponse(saved);
     }
@@ -117,6 +119,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     public KpiFeedbackActionResponse update(Long id, KpiFeedbackActionRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
         checkWriteAccess(action.getKpiMeasurementId(), "UPDATE");
+        Map<String, Object> oldValues = snapshotOf(action);
 
         // Validate Jira issue key format if non-null
         validateJiraKey(request.getLinkedJiraIssueKey());
@@ -129,7 +132,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
         KpiFeedbackAction saved = feedbackActionRepository.save(action);
-        saveAudit(saved, "UPDATE");
+        saveAudit(saved, oldValues, KpiFeedbackActionAudit.ChangeType.UPDATE, saved.getUpdatedBy());
 
         return toResponse(saved);
     }
@@ -140,6 +143,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     public KpiFeedbackActionResponse updateJiraStatus(Long id, JiraStatusUpdateRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
         checkWriteAccess(action.getKpiMeasurementId(), "UPDATE_JIRA");
+        Map<String, Object> oldValues = snapshotOf(action);
 
         action.setJiraStatusSnapshot(request.getJiraStatusSnapshot());
         action.setJiraStatusLastSyncedAt(
@@ -150,7 +154,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
         KpiFeedbackAction saved = feedbackActionRepository.save(action);
-        saveAudit(saved, "JIRA_UPDATE");
+        saveAudit(saved, oldValues, KpiFeedbackActionAudit.ChangeType.UPDATE, saved.getUpdatedBy());
 
         return toResponse(saved);
     }
@@ -161,6 +165,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     public KpiFeedbackActionResponse recordVerification(Long id, FeedbackVerificationRequest request) {
         KpiFeedbackAction action = findOrThrow(id);
         checkWriteAccess(action.getKpiMeasurementId(), "VERIFY");
+        Map<String, Object> oldValues = snapshotOf(action);
 
         validateVerificationReference(request.getVerificationResult(), request.getVerificationKpiMeasurementId());
 
@@ -172,7 +177,7 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
         KpiFeedbackAction saved = feedbackActionRepository.save(action);
-        saveAudit(saved, "VERIFY");
+        saveAudit(saved, oldValues, KpiFeedbackActionAudit.ChangeType.VERIFICATION, saved.getUpdatedBy());
 
         return toResponse(saved);
     }
@@ -183,13 +188,14 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
     public void delete(Long id) {
         KpiFeedbackAction action = findOrThrow(id);
         checkWriteAccess(action.getKpiMeasurementId(), "DELETE");
+        Map<String, Object> oldValues = snapshotOf(action);
 
         action.setIsDeleted(true);
         action.setUpdatedAt(LocalDateTime.now());
         action.setUpdatedBy(resolveCurrentUserEmployeeId());
 
         KpiFeedbackAction saved = feedbackActionRepository.save(action);
-        saveAudit(saved, "DELETE");
+        saveAudit(saved, oldValues, KpiFeedbackActionAudit.ChangeType.UPDATE, saved.getUpdatedBy());
     }
 
     /** Helper to validate Jira Issue Key regex pattern */
@@ -240,16 +246,39 @@ public class KpiFeedbackActionServiceImpl implements KpiFeedbackActionService {
         }
     }
 
-    /** Helper to write audit snapshots */
-    private void saveAudit(KpiFeedbackAction action, String actionType) {
+    /** Writes before/after snapshots using the database audit-table contract. */
+    private void saveAudit(KpiFeedbackAction action, Map<String, Object> oldValues,
+                           KpiFeedbackActionAudit.ChangeType changeType, Integer changedBy) {
+        if (changedBy == null) {
+            throw new IllegalStateException("An audit entry requires the employee who made the change");
+        }
         KpiFeedbackActionAudit audit = new KpiFeedbackActionAudit();
-        audit.setKpiFeedbackActionId(action.getId());
-        audit.setRootCauseSummary(action.getRootCauseSummary());
-        audit.setLinkedJiraIssueKey(action.getLinkedJiraIssueKey());
-        audit.setActionType(actionType);
-        audit.setChangedBy(resolveCurrentUserEmployeeId());
+        audit.setFeedbackActionId(action.getId());
+        audit.setOldValues(oldValues);
+        audit.setNewValues(snapshotOf(action));
+        audit.setChangeType(changeType);
+        audit.setChangedBy(changedBy);
         audit.setChangedAt(LocalDateTime.now());
         auditRepository.save(audit);
+    }
+
+    private Map<String, Object> snapshotOf(KpiFeedbackAction action) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("kpiMeasurementId", action.getKpiMeasurementId());
+        snapshot.put("rootCauseSummary", action.getRootCauseSummary());
+        snapshot.put("linkedJiraIssueKey", action.getLinkedJiraIssueKey());
+        snapshot.put("submittedBy", action.getSubmittedBy());
+        snapshot.put("submittedAt", action.getSubmittedAt());
+        snapshot.put("jiraStatusSnapshot", action.getJiraStatusSnapshot());
+        snapshot.put("jiraStatusLastSyncedAt", action.getJiraStatusLastSyncedAt());
+        snapshot.put("jiraResolvedAt", action.getJiraResolvedAt());
+        snapshot.put("jiraResolutionCategory", action.getJiraResolutionCategory());
+        snapshot.put("verificationResult", action.getVerificationResult());
+        snapshot.put("verificationKpiMeasurementId", action.getVerificationKpiMeasurementId());
+        snapshot.put("verificationCheckedAt", action.getVerificationCheckedAt());
+        snapshot.put("relatedPreviousFeedbackId", action.getRelatedPreviousFeedbackId());
+        snapshot.put("isDeleted", action.getIsDeleted());
+        return snapshot;
     }
 
     /** Copies the editable full-request fields to an existing or new entity. */
