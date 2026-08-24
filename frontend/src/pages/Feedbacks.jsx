@@ -43,11 +43,18 @@ function getBadgeState(kpi) {
     return "Root cause logged — no fix tracked";
   }
 
-  if (fb.jiraStatusSnapshot === "Done" || fb.jiraStatusSnapshot === "Closed" || fb.jiraStatusSnapshot === "Resolved") {
+  // Fix: use jiraResolvedAt instead of hardcoded Done/Closed/Resolved status text strings
+  if (fb.jiraResolvedAt) {
     return "Resolved in Jira — awaiting verification";
   }
 
-  return `In progress — ${fb.linkedJiraIssueKey}`;
+  // Fix: add distinct state for linked but never synced
+  if (!fb.jiraStatusSnapshot) {
+    return `Linked but never synced — ${fb.linkedJiraIssueKey}`;
+  }
+
+  // Fix: show the actual jiraStatusSnapshot value instead of always saying "In progress"
+  return `${fb.jiraStatusSnapshot} — ${fb.linkedJiraIssueKey}`;
 }
 
 /**
@@ -59,13 +66,143 @@ function getBadgeStyleClass(badgeState) {
   
   if (badgeState === "Feedback needed") return "rem-badge--feedback-needed";
   if (badgeState === "Root cause logged — no fix tracked") return "rem-badge--no-fix-tracked";
-  if (badgeState.startsWith("In progress")) return "rem-badge--in-progress";
   if (badgeState === "Resolved in Jira — awaiting verification") return "rem-badge--resolved-jira";
   if (badgeState === "Improved") return "rem-badge--improved";
   if (badgeState === "Not improved — re-escalate") return "rem-badge--not-improved";
   if (badgeState === "Closed unfixed — re-escalate") return "rem-badge--closed-unfixed";
   
+  // Fix: style any unresolved Jira status (includes a separator) with in-progress style
+  if (badgeState.includes(" — ")) return "rem-badge--in-progress";
+  
   return "";
+}
+
+/**
+ * Shared helper to map measurements, assignments, employees, metrics and feedback actions
+ * into a single flat array of KPI objects, filtered by role access.
+ */
+function processKpiData(user, employees, kpisList, assignments, measurements, feedbackActions) {
+  // Collect the current user's team memberships based on their active assignments
+  const myTeams = new Set(
+    assignments
+      .filter((a) => Number(a.employee_id) === Number(user?.id))
+      .map((a) => a.team)
+      .filter(Boolean)
+  );
+
+  const items = [];
+
+  // Loop through all assignments to build latest measurement details
+  assignments.forEach((assign) => {
+    const emp = employees.find((e) => Number(e.id) === Number(assign.employee_id));
+    const kpiMetric = kpisList.find((k) => Number(k.id) === Number(assign.kpi_metric_id));
+    
+    if (!emp || !kpiMetric || !kpiMetric.is_active) return;
+
+    // Find measurements for this specific assignment
+    const assignmentMs = measurements.filter(
+      (m) =>
+        Number(m.kpi_metric_id) === Number(kpiMetric.id) &&
+        Number(m.subject_employee_id) === Number(emp.id) &&
+        !m.is_deleted &&
+        !m.is_corrected
+    );
+
+    if (assignmentMs.length === 0) return;
+
+    // Sort to identify the latest measurement chronologically
+    const latestM = [...assignmentMs].sort((a, b) =>
+      String(b.period_start_date).localeCompare(String(a.period_start_date))
+    )[0];
+
+    // Check if latest measurement is non-green
+    const isNonGreen = latestM.status !== "green";
+
+    // Retrieve corresponding active feedback action for this measurement
+    const matchedFb = feedbackActions.find(
+      (f) => Number(f.kpiMeasurementId) === Number(latestM.id) && !f.isDeleted
+    );
+
+    // Find if this measurement verified a prior action as not_improved / not_verifiable (failed remediation)
+    const priorFailedFb = !matchedFb ? feedbackActions.find(
+      (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
+             !f.isDeleted &&
+             (f.verificationResult === "not_improved" || f.verificationResult === "not_verifiable")
+    ) : null;
+
+    // Find if this measurement verified a prior action as improved
+    const priorImprovedFb = !matchedFb && !priorFailedFb ? feedbackActions.find(
+      (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
+             !f.isDeleted &&
+             f.verificationResult === "improved"
+    ) : null;
+
+    // Resolve active feedback action record to link
+    const activeFb = matchedFb || priorFailedFb || priorImprovedFb;
+
+    const isImproved = !!priorImprovedFb || (matchedFb && matchedFb.verificationResult === "improved");
+
+    // Skip if KPI is green AND has no improved remediation marker (we only track non-green or improved remediation)
+    if (!isNonGreen && !isImproved) return;
+
+    items.push({
+      id: latestM.id, // measurement ID
+      kpiMetricId: kpiMetric.id,
+      kpiName: kpiMetric.name,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      managerId: emp.managerId,
+      value: latestM.measured_value,
+      target: kpiMetric.target_value,
+      unit: kpiMetric.unit === "Percentage" ? "%" : (kpiMetric.unit || ""),
+      ragStatus: latestM.status,
+      period: latestM.measurement_period_label,
+      kraAreaId: kpiMetric.kra_area_id,
+      kraArea: kraName(kpiMetric.kra_area_id),
+      isTeamKpi: !!kpiMetric.isTeamKpi,
+      team: assign.team,
+      feedbackAction: activeFb ? {
+        id: activeFb.id,
+        kpiMeasurementId: activeFb.kpiMeasurementId,
+        rootCause: activeFb.rootCauseSummary,
+        linkedJiraIssueKey: activeFb.linkedJiraIssueKey,
+        jiraStatusSnapshot: activeFb.jiraStatusSnapshot,
+        jiraStatusLastSyncedAt: activeFb.jiraStatusLastSyncedAt,
+        jiraResolvedAt: activeFb.jiraResolvedAt,
+        jiraResolutionCategory: activeFb.jiraResolutionCategory,
+        submittedBy: activeFb.submittedByName || `Employee ID ${activeFb.submittedBy}`,
+        submittedById: activeFb.submittedBy,
+        relatedPreviousFeedbackId: activeFb.relatedPreviousFeedbackId,
+      } : null,
+      verificationResult: activeFb ? activeFb.verificationResult : null,
+      verifiedAfterIssueKey: activeFb ? activeFb.linkedJiraIssueKey : null,
+    });
+  });
+
+  // Role-based visibility filtering
+  let roleFiltered = [];
+  const userRole = String(user?.role).toLowerCase();
+
+  if (userRole === "admin" || userRole === "hr") {
+    // Admin and HR roles see all relevant KPIs across the entire system
+    roleFiltered = items;
+  } else if (userRole === "manager") {
+    // Managers see their own KPIs + those of their direct reports
+    roleFiltered = items.filter(
+      (item) =>
+        Number(item.employeeId) === Number(user.id) ||
+        Number(item.managerId) === Number(user.id)
+    );
+  } else {
+    // Employees see their own assigned KPIs + any Team KPIs in their assigned teams
+    roleFiltered = items.filter(
+      (item) =>
+        Number(item.employeeId) === Number(user.id) ||
+        (item.isTeamKpi && item.team && myTeams.has(item.team))
+    );
+  }
+
+  return roleFiltered;
 }
 
 export default function Feedbacks() {
@@ -109,124 +246,8 @@ export default function Feedbacks() {
         setAllMeasurements(measurements);
         setAllFeedbackActions(feedbackActions);
 
-        // Collect the current user's team memberships based on their active assignments
-        const myTeams = new Set(
-          assignments
-            .filter((a) => Number(a.employee_id) === Number(user?.id))
-            .map((a) => a.team)
-            .filter(Boolean)
-        );
-
-        const items = [];
-
-        // Loop through all assignments to build latest measurement details
-        assignments.forEach((assign) => {
-          const emp = employees.find((e) => Number(e.id) === Number(assign.employee_id));
-          const kpiMetric = kpisList.find((k) => Number(k.id) === Number(assign.kpi_metric_id));
-          
-          if (!emp || !kpiMetric || !kpiMetric.is_active) return;
-
-          // Find measurements for this specific assignment
-          const assignmentMs = measurements.filter(
-            (m) =>
-              Number(m.kpi_metric_id) === Number(kpiMetric.id) &&
-              Number(m.subject_employee_id) === Number(emp.id) &&
-              !m.is_deleted &&
-              !m.is_corrected
-          );
-
-          if (assignmentMs.length === 0) return;
-
-          // Sort to identify the latest measurement chronologically
-          const latestM = [...assignmentMs].sort((a, b) =>
-            String(b.period_start_date).localeCompare(String(a.period_start_date))
-          )[0];
-
-          // Check if latest measurement is non-green
-          const isNonGreen = latestM.status !== "green";
-
-          // Retrieve corresponding active feedback action for this measurement
-          const matchedFb = feedbackActions.find(
-            (f) => Number(f.kpiMeasurementId) === Number(latestM.id) && !f.isDeleted
-          );
-
-          // Find if this measurement verified a prior action as not_improved / not_verifiable (failed remediation)
-          const priorFailedFb = !matchedFb ? feedbackActions.find(
-            (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
-                   !f.isDeleted &&
-                   (f.verificationResult === "not_improved" || f.verificationResult === "not_verifiable")
-          ) : null;
-
-          // Find if this measurement verified a prior action as improved
-          const priorImprovedFb = !matchedFb && !priorFailedFb ? feedbackActions.find(
-            (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
-                   !f.isDeleted &&
-                   f.verificationResult === "improved"
-          ) : null;
-
-          // Resolve active feedback action record to link
-          const activeFb = matchedFb || priorFailedFb || priorImprovedFb;
-
-          const isImproved = !!priorImprovedFb || (matchedFb && matchedFb.verificationResult === "improved");
-
-          // Skip if KPI is green AND has no improved remediation marker (we only track non-green or improved remediation)
-          if (!isNonGreen && !isImproved) return;
-
-          items.push({
-            id: latestM.id, // measurement ID
-            kpiMetricId: kpiMetric.id,
-            kpiName: kpiMetric.name,
-            employeeId: emp.id,
-            employeeName: emp.name,
-            managerId: emp.managerId,
-            value: latestM.measured_value,
-            target: kpiMetric.target_value,
-            unit: kpiMetric.unit === "Percentage" ? "%" : (kpiMetric.unit || ""),
-            ragStatus: latestM.status,
-            period: latestM.measurement_period_label,
-            kraAreaId: kpiMetric.kra_area_id,
-            kraArea: kraName(kpiMetric.kra_area_id),
-            isTeamKpi: !!kpiMetric.isTeamKpi,
-            team: assign.team,
-            feedbackAction: activeFb ? {
-              id: activeFb.id,
-              kpiMeasurementId: activeFb.kpiMeasurementId,
-              rootCause: activeFb.rootCauseSummary,
-              linkedJiraIssueKey: activeFb.linkedJiraIssueKey,
-              jiraStatusSnapshot: activeFb.jiraStatusSnapshot,
-              jiraStatusLastSyncedAt: activeFb.jiraStatusLastSyncedAt,
-              submittedBy: activeFb.submittedByName || `Employee ID ${activeFb.submittedBy}`,
-              submittedById: activeFb.submittedBy,
-              relatedPreviousFeedbackId: activeFb.relatedPreviousFeedbackId,
-            } : null,
-            verificationResult: activeFb ? activeFb.verificationResult : null,
-            verifiedAfterIssueKey: activeFb ? activeFb.linkedJiraIssueKey : null,
-          });
-        });
-
-        // Role-based visibility filtering
-        let roleFiltered = [];
-        const userRole = String(user?.role).toLowerCase();
-
-        if (userRole === "admin" || userRole === "hr") {
-          // Admin and HR roles see all relevant KPIs across the entire system
-          roleFiltered = items;
-        } else if (userRole === "manager") {
-          // Managers see their own KPIs + those of their direct reports
-          roleFiltered = items.filter(
-            (item) =>
-              Number(item.employeeId) === Number(user.id) ||
-              Number(item.managerId) === Number(user.id)
-          );
-        } else {
-          // Employees see their own assigned KPIs + any Team KPIs in their assigned teams
-          roleFiltered = items.filter(
-            (item) =>
-              Number(item.employeeId) === Number(user.id) ||
-              (item.isTeamKpi && item.team && myTeams.has(item.team))
-          );
-        }
-
+        // Process data using shared helper
+        const roleFiltered = processKpiData(user, employees, kpisList, assignments, measurements, feedbackActions);
         setProcessedKpis(roleFiltered);
       } catch (err) {
         console.error("Failed to load feedbacks page data:", err);
@@ -262,108 +283,8 @@ export default function Feedbacks() {
         listFeedbackActions()
       ]);
 
-      const myTeams = new Set(
-        assignments
-          .filter((a) => Number(a.employee_id) === Number(currentUser?.id))
-          .map((a) => a.team)
-          .filter(Boolean)
-      );
-
-      const items = [];
-      assignments.forEach((assign) => {
-        const emp = employees.find((e) => Number(e.id) === Number(assign.employee_id));
-        const kpiMetric = kpisList.find((k) => Number(k.id) === Number(assign.kpi_metric_id));
-        
-        if (!emp || !kpiMetric || !kpiMetric.is_active) return;
-
-        const assignmentMs = measurements.filter(
-          (m) =>
-            Number(m.kpi_metric_id) === Number(kpiMetric.id) &&
-            Number(m.subject_employee_id) === Number(emp.id) &&
-            !m.is_deleted &&
-            !m.is_corrected
-        );
-
-        if (assignmentMs.length === 0) return;
-
-        const latestM = [...assignmentMs].sort((a, b) =>
-          String(b.period_start_date).localeCompare(String(a.period_start_date))
-        )[0];
-
-        const isNonGreen = latestM.status !== "green";
-
-        const matchedFb = feedbackActions.find(
-          (f) => Number(f.kpiMeasurementId) === Number(latestM.id) && !f.isDeleted
-        );
-
-        const priorFailedFb = !matchedFb ? feedbackActions.find(
-          (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
-                 !f.isDeleted &&
-                 (f.verificationResult === "not_improved" || f.verificationResult === "not_verifiable")
-        ) : null;
-
-        const priorImprovedFb = !matchedFb && !priorFailedFb ? feedbackActions.find(
-          (f) => Number(f.verificationKpiMeasurementId) === Number(latestM.id) &&
-                 !f.isDeleted &&
-                 f.verificationResult === "improved"
-        ) : null;
-
-        const activeFb = matchedFb || priorFailedFb || priorImprovedFb;
-
-        const isImproved = !!priorImprovedFb || (matchedFb && matchedFb.verificationResult === "improved");
-
-        if (!isNonGreen && !isImproved) return;
-
-        items.push({
-          id: latestM.id,
-          kpiMetricId: kpiMetric.id,
-          kpiName: kpiMetric.name,
-          employeeId: emp.id,
-          employeeName: emp.name,
-          managerId: emp.managerId,
-          value: latestM.measured_value,
-          target: kpiMetric.target_value,
-          unit: kpiMetric.unit === "Percentage" ? "%" : (kpiMetric.unit || ""),
-          ragStatus: latestM.status,
-          period: latestM.measurement_period_label,
-          kraAreaId: kpiMetric.kra_area_id,
-          kraArea: kraName(kpiMetric.kra_area_id),
-          isTeamKpi: !!kpiMetric.isTeamKpi,
-          team: assign.team,
-          feedbackAction: activeFb ? {
-            id: activeFb.id,
-            kpiMeasurementId: activeFb.kpiMeasurementId,
-            rootCause: activeFb.rootCauseSummary,
-            linkedJiraIssueKey: activeFb.linkedJiraIssueKey,
-            jiraStatusSnapshot: activeFb.jiraStatusSnapshot,
-            jiraStatusLastSyncedAt: activeFb.jiraStatusLastSyncedAt,
-            submittedBy: activeFb.submittedByName || `Employee ID ${activeFb.submittedBy}`,
-            submittedById: activeFb.submittedBy,
-            relatedPreviousFeedbackId: activeFb.relatedPreviousFeedbackId,
-          } : null,
-          verificationResult: activeFb ? activeFb.verificationResult : null,
-          verifiedAfterIssueKey: activeFb ? activeFb.linkedJiraIssueKey : null,
-        });
-      });
-
-      let roleFiltered = [];
-      const userRole = String(currentUser?.role).toLowerCase();
-
-      if (userRole === "admin" || userRole === "hr") {
-        roleFiltered = items;
-      } else if (userRole === "manager") {
-        roleFiltered = items.filter(
-          (item) =>
-            Number(item.employeeId) === Number(currentUser.id) ||
-            Number(item.managerId) === Number(currentUser.id)
-        );
-      } else {
-        roleFiltered = items.filter(
-          (item) =>
-            Number(item.employeeId) === Number(currentUser.id) ||
-            (item.isTeamKpi && item.team && myTeams.has(item.team))
-        );
-      }
+      // Process data using shared helper
+      const roleFiltered = processKpiData(currentUser, employees, kpisList, assignments, measurements, feedbackActions);
 
       setProcessedKpis(roleFiltered);
       setAllMeasurements(measurements);

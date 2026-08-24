@@ -2,8 +2,7 @@ import { useState } from "react";
 import { 
   saveFeedbackAction, 
   deleteFeedbackAction, 
-  refreshJiraStatus, 
-  recordVerification 
+  refreshJiraStatus 
 } from "../lib/store";
 
 /**
@@ -63,6 +62,12 @@ export default function RemediationPanel({
   const [lastSynced, setLastSynced] = useState(() => {
     if (kpi.feedbackAction && !isReescalating) {
       return kpi.feedbackAction.jiraStatusLastSyncedAt || null;
+    }
+    return null;
+  });
+  const [jiraResolutionCategory, setJiraResolutionCategory] = useState(() => {
+    if (kpi.feedbackAction && !isReescalating) {
+      return kpi.feedbackAction.jiraResolutionCategory || null;
     }
     return null;
   });
@@ -132,24 +137,9 @@ export default function RemediationPanel({
       }
 
       // Call store API to persist feedback action on the backend
-      const result = await saveFeedbackAction(payload);
+      await saveFeedbackAction(payload);
 
-      // If a Jira key was added and status is Done/Rejected, update verification result
-      if (payload.linkedJiraIssueKey) {
-        let nextVerification = null;
-        if (result.jiraStatusSnapshot === "Done") {
-          nextVerification = "pending";
-        } else if (result.jiraStatusSnapshot === "Rejected" || result.jiraStatusSnapshot === "Won't Fix" || result.jiraStatusSnapshot === "Won't Do") {
-          nextVerification = "not_verifiable";
-        }
-
-        if (nextVerification) {
-          await recordVerification(result.id, {
-            verificationResult: nextVerification,
-            verificationKpiMeasurementId: kpi.id
-          });
-        }
-      }
+      // Fix: Removed manual recordVerification calls to prevent blocking database eligibility check
 
       alert(isReescalating ? "Re-escalation feedback successfully logged!" : "Remediation feedback successfully saved!");
       setIsEditing(false);
@@ -176,6 +166,7 @@ export default function RemediationPanel({
         setJiraKey("");
         setJiraStatus(null);
         setLastSynced(null);
+        setJiraResolutionCategory(null);
         alert("Remediation feedback deleted.");
         onRefreshData();
       } catch (err) {
@@ -191,21 +182,9 @@ export default function RemediationPanel({
       const updatedAction = await refreshJiraStatus(kpi.feedbackAction.id);
       setJiraStatus(updatedAction.jiraStatusSnapshot);
       setLastSynced(updatedAction.jiraStatusLastSyncedAt);
+      setJiraResolutionCategory(updatedAction.jiraResolutionCategory);
       
-      // If the Jira status changes to Done/Rejected, record verification outcome
-      let nextVerification = null;
-      if (updatedAction.jiraStatusSnapshot === "Done") {
-        nextVerification = "pending";
-      } else if (updatedAction.jiraResolutionCategory === "not_fixed") {
-        nextVerification = "not_verifiable";
-      }
-
-      if (nextVerification) {
-        await recordVerification(updatedAction.id, {
-          verificationResult: nextVerification,
-          verificationKpiMeasurementId: kpi.id
-        });
-      }
+      // Fix: Removed manual recordVerification calls, relying on server-side state instead
 
       alert(`Jira ticket status synchronized successfully. Current status: ${updatedAction.jiraStatusSnapshot}`);
       onRefreshData();
@@ -256,6 +235,7 @@ export default function RemediationPanel({
     setJiraKey("");
     setJiraStatus(null);
     setLastSynced(null);
+    setJiraResolutionCategory(null);
   };
 
   // Compute the historical list of measurements for this KPI and assignee
@@ -270,20 +250,98 @@ export default function RemediationPanel({
     )
     .sort((a, b) => String(b.period_start_date).localeCompare(String(a.period_start_date)))
     .map((m) => {
-      // Find matching feedback action for the historical measurement
-      const fb = allFeedbackActions.find((f) => Number(f.kpiMeasurementId) === Number(m.id));
+      // Fix: Add && !f.isDeleted checks to filter out soft-deleted actions
+      const originatingFb = allFeedbackActions.find(
+        (f) => Number(f.kpiMeasurementId) === Number(m.id) && !f.isDeleted
+      );
+      const verifyingFb = allFeedbackActions.find(
+        (f) => Number(f.verificationKpiMeasurementId) === Number(m.id) && !f.isDeleted
+      );
       return {
         id: m.id,
         period: m.measurement_period_label,
         value: m.measured_value,
         ragStatus: m.status,
-        verificationResult: fb ? fb.verificationResult : null,
-        verifiedAfterIssueKey: fb ? fb.linkedJiraIssueKey : null,
+        originatingFb,
+        verifyingFb,
       };
     });
 
   // Highlight if previous attempt failed or was marked closed unfixed
   const isFailedRemediation = kpi.verificationResult === "not_improved" || kpi.verificationResult === "not_verifiable";
+
+  const renderCurrentRowStatus = () => {
+    const fb = kpi.feedbackAction;
+    if (!fb) return null;
+    
+    const res = kpi.verificationResult;
+    const isOriginating = Number(fb.kpiMeasurementId) === Number(kpi.id);
+    const issueKey = fb.linkedJiraIssueKey;
+    const issueLabel = issueKey ? `via ${issueKey}` : "Root Cause";
+
+    if (isOriginating) {
+      if (res === "improved") {
+        return (
+          <span className="verification-marker verification-marker--improved">
+            ✅ Resolved: Improved
+          </span>
+        );
+      } else if (res === "not_improved") {
+        return (
+          <span className="verification-marker verification-marker--not-improved">
+            ⚠️ Resolved: Not improved
+          </span>
+        );
+      } else if (res === "not_verifiable") {
+        return (
+          <span className="verification-marker verification-marker--closed-unfixed">
+            🛑 Resolved: Closed unfixed
+          </span>
+        );
+      } else {
+        if (fb.jiraResolvedAt) {
+          return (
+            <span className="verification-marker verification-marker--pending">
+              ⌛ Resolved: awaiting verification
+            </span>
+          );
+        } else {
+          return (
+            <span style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+              Feedback logged, no verification yet
+            </span>
+          );
+        }
+      }
+    } else {
+      // Verifying row
+      if (res === "improved") {
+        return (
+          <span className="verification-marker verification-marker--improved">
+            ✅ Verified improvement ({issueLabel})
+          </span>
+        );
+      } else if (res === "not_improved") {
+        return (
+          <span className="verification-marker verification-marker--not-improved">
+            ⚠️ Verified no improvement ({issueLabel})
+          </span>
+        );
+      } else if (res === "not_verifiable") {
+        return (
+          <span className="verification-marker verification-marker--closed-unfixed">
+            🛑 Verified closed unfixed ({issueLabel})
+          </span>
+        );
+      } else {
+        return (
+          <span style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+            Awaiting verification
+          </span>
+        );
+      }
+    }
+  };
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -500,11 +558,12 @@ export default function RemediationPanel({
               <div className="jira-strip__main">
                 <div>
                   <span className="jira-strip__sync" style={{ display: "block", marginBottom: "0.2rem" }}>Status Snapshot:</span>
+                  {/* Fix: Prefer deriving badge style from jiraResolutionCategory rather than guessing from status text */}
                   <span className={`jira-strip__badge ${
-                    jiraStatus === "To Do" || jiraStatus === "To Do" ? "jira-strip__badge--todo" :
-                    jiraStatus === "In Progress" ? "jira-strip__badge--progress" :
-                    jiraStatus === "Done" || jiraStatus === "Closed" || jiraStatus === "Resolved" ? "jira-strip__badge--done" :
-                    "jira-strip__badge--rejected"
+                    jiraResolutionCategory === "fixed" ? "jira-strip__badge--done" :
+                    jiraResolutionCategory === "not_fixed" ? "jira-strip__badge--rejected" :
+                    (jiraStatus === "To Do" || jiraStatus === "Todo") ? "jira-strip__badge--todo" :
+                    "jira-strip__badge--progress"
                   }`}>
                     {jiraStatus || "Loading..."}
                   </span>
@@ -592,7 +651,7 @@ export default function RemediationPanel({
           {/* Past Measurements Section */}
           <div className="past-measurements-section">
             <h4>Measurement History & Verification</h4>
-            {historyRows.length === 0 ? (
+            {historyRows.length === 0 && !kpi.feedbackAction ? (
               <p style={{ fontSize: "0.8rem", color: "var(--muted)", fontStyle: "italic" }}>No historical measurements recorded for this KPI.</p>
             ) : (
               <div className="past-table-wrap">
@@ -606,68 +665,104 @@ export default function RemediationPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Render the current verified row if applicable */}
-                    {kpi.verificationResult && kpi.feedbackAction && (
+                    {/* Fix: Loosened current-row condition to render whenever feedbackAction exists */}
+                    {kpi.feedbackAction && (
                       <tr style={{ background: "var(--primary-bg)" }}>
                         <td className="cell-strong">{kpi.period}</td>
                         <td className="mono">{kpi.value}</td>
                         <td><span className={`rag-dot rag-dot--${kpi.ragStatus}`}></span></td>
                         <td>
-                          {kpi.verificationResult === "improved" && (
-                            <span className="verification-marker verification-marker--improved">
-                              ✅ Improved after {kpi.verifiedAfterIssueKey}
-                            </span>
-                          )}
-                          {kpi.verificationResult === "not_improved" && (
-                            <span className="verification-marker verification-marker--not-improved">
-                              ⚠️ Not improved after {kpi.verifiedAfterIssueKey}
-                            </span>
-                          )}
-                          {kpi.verificationResult === "not_verifiable" && (
-                            <span className="verification-marker verification-marker--closed-unfixed">
-                              🛑 Closed unfixed after {kpi.verifiedAfterIssueKey}
-                            </span>
-                          )}
-                          {kpi.verificationResult === "pending" && (
-                            <span className="verification-marker verification-marker--pending">
-                              ⌛ Resolved: awaiting verification
-                            </span>
-                          )}
+                          {renderCurrentRowStatus()}
                         </td>
                       </tr>
                     )}
-                    {historyRows.map((row) => (
-                      <tr key={row.id}>
-                        <td className="cell-strong">{row.period}</td>
-                        <td className="mono">{row.value}</td>
-                        <td><span className={`rag-dot rag-dot--${row.ragStatus}`}></span></td>
-                        <td>
-                          {row.verificationResult ? (
-                            row.verificationResult === "improved" ? (
-                              <span className="verification-marker verification-marker--improved">
-                                ✅ Improved after {row.verifiedAfterIssueKey}
-                              </span>
-                            ) : row.verificationResult === "not_improved" ? (
-                              <span className="verification-marker verification-marker--not-improved">
-                                ⚠️ Not improved after {row.verifiedAfterIssueKey}
-                              </span>
-                            ) : row.verificationResult === "not_verifiable" ? (
-                              <span className="verification-marker verification-marker--closed-unfixed">
-                                🛑 Closed unfixed after {row.verifiedAfterIssueKey}
-                              </span>
-                            ) : (
-                              <span className="verification-marker verification-marker--pending">
+                    {historyRows.map((row) => {
+                      const elements = [];
+                      
+                      // Fix: Differentiate wording between originating role and verifying role
+                      if (row.originatingFb) {
+                        const res = row.originatingFb.verificationResult;
+                        if (res === "improved") {
+                          elements.push(
+                            <span key="orig-imp" className="verification-marker verification-marker--improved">
+                              ✅ Resolved: Improved
+                            </span>
+                          );
+                        } else if (res === "not_improved") {
+                          elements.push(
+                            <span key="orig-not-imp" className="verification-marker verification-marker--not-improved">
+                              ⚠️ Resolved: Not improved
+                            </span>
+                          );
+                        } else if (res === "not_verifiable") {
+                          elements.push(
+                            <span key="orig-not-ver" className="verification-marker verification-marker--closed-unfixed">
+                              🛑 Resolved: Closed unfixed
+                            </span>
+                          );
+                        } else {
+                          if (row.originatingFb.jiraResolvedAt) {
+                            elements.push(
+                              <span key="orig-pend" className="verification-marker verification-marker--pending">
                                 ⌛ Resolved: awaiting verification
                               </span>
-                            )
-                          ) : (
-                            <span style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
-                              No verification marker (Green or no linked issue)
+                            );
+                          } else {
+                            elements.push(
+                              <span key="orig-none" style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+                                Feedback logged, no verification yet
+                              </span>
+                            );
+                          }
+                        }
+                      }
+
+                      if (row.verifyingFb) {
+                        const res = row.verifyingFb.verificationResult;
+                        const issueKey = row.verifyingFb.linkedJiraIssueKey;
+                        const issueLabel = issueKey ? `via ${issueKey}` : "Root Cause";
+                        if (res === "improved") {
+                          elements.push(
+                            <span key="ver-imp" className="verification-marker verification-marker--improved">
+                              ✅ Verified improvement ({issueLabel})
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          );
+                        } else if (res === "not_improved") {
+                          elements.push(
+                            <span key="ver-not-imp" className="verification-marker verification-marker--not-improved">
+                              ⚠️ Verified no improvement ({issueLabel})
+                            </span>
+                          );
+                        } else if (res === "not_verifiable") {
+                          elements.push(
+                            <span key="ver-not-ver" className="verification-marker verification-marker--closed-unfixed">
+                              🛑 Verified closed unfixed ({issueLabel})
+                            </span>
+                          );
+                        }
+                      }
+
+                      if (elements.length === 0) {
+                        elements.push(
+                          <span key="fallback" style={{ color: "var(--muted)", fontSize: "0.74rem" }}>
+                            No verification marker (Green or no linked issue)
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <tr key={row.id}>
+                          <td className="cell-strong">{row.period}</td>
+                          <td className="mono">{row.value}</td>
+                          <td><span className={`rag-dot rag-dot--${row.ragStatus}`}></span></td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                              {elements}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

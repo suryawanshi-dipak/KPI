@@ -8,6 +8,7 @@ import com.kpi.entity.enums.MeasurementStatus;
 import com.kpi.repository.KpiFeedbackActionAuditRepository;
 import com.kpi.repository.KpiFeedbackActionRepository;
 import com.kpi.repository.KpiMeasurementRepository;
+import com.kpi.service.JiraSyncService;
 import com.kpi.service.VerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,13 +29,16 @@ public class VerificationServiceImpl implements VerificationService {
     private final KpiMeasurementRepository measurementRepository;
     private final KpiFeedbackActionRepository feedbackActionRepository;
     private final KpiFeedbackActionAuditRepository auditRepository;
+    private final JiraSyncService jiraSyncService;
 
     public VerificationServiceImpl(KpiMeasurementRepository measurementRepository,
                                    KpiFeedbackActionRepository feedbackActionRepository,
-                                   KpiFeedbackActionAuditRepository auditRepository) {
+                                   KpiFeedbackActionAuditRepository auditRepository,
+                                   JiraSyncService jiraSyncService) {
         this.measurementRepository = measurementRepository;
         this.feedbackActionRepository = feedbackActionRepository;
         this.auditRepository = auditRepository;
+        this.jiraSyncService = jiraSyncService;
     }
 
     @org.springframework.scheduling.annotation.Async
@@ -65,13 +69,11 @@ public class VerificationServiceImpl implements VerificationService {
             return;
         }
 
-        // Look up prior fixed-but-unverified feedback actions
+        // Look up prior unverified feedback actions (where verification_result is null)
         List<KpiFeedbackAction> unverifiedActions = feedbackActionRepository.findResolvedAndUnverified(
                 newMeasurement.getKpiMetric().getId(),
                 newMeasurement.getSubjectEmployeeId(),
-                newMeasurement.getPeriodStartDate(),
-                KpiFeedbackAction.JiraResolutionCategory.fixed,
-                KpiFeedbackAction.VerificationResult.pending
+                newMeasurement.getPeriodStartDate()
         );
 
         log.info("Found {} unverified actions matching metric: {}, subject employee: {}, date before: {}",
@@ -81,6 +83,36 @@ public class VerificationServiceImpl implements VerificationService {
                 newMeasurement.getPeriodStartDate());
 
         for (KpiFeedbackAction action : unverifiedActions) {
+            // Live status pull for unresolved Jira-linked actions
+            if (action.getLinkedJiraIssueKey() != null && action.getJiraResolvedAt() == null) {
+                try {
+                    log.info("Attempting live Jira sync pull for action: {}, issue: {}", action.getId(), action.getLinkedJiraIssueKey());
+                    // Reusing the same manual Refresh sync method, which handles its own try-catch internally
+                    jiraSyncService.syncJiraStatus(action.getId());
+                    // Re-fetch action to see latest DB state within current transaction
+                    action = feedbackActionRepository.findById(action.getId()).orElse(action);
+                } catch (Exception e) {
+                    log.error("Live Jira status pull failed for action id: " + action.getId() + ". Proceeding without failing transaction.", e);
+                }
+            }
+
+            // Determine eligibility:
+            // (a) linked_jira_issue_key is NULL (no ticket to track) OR
+            // (b) linked_jira_issue_key is NOT NULL and jira_resolved_at is NOT NULL (resolved Jira ticket)
+            boolean eligible = false;
+            if (action.getLinkedJiraIssueKey() == null) {
+                eligible = true;
+            } else if (action.getJiraResolvedAt() != null) {
+                eligible = true;
+            }
+
+            // In both cases, verification_result must still be NULL
+            if (!eligible || action.getVerificationResult() != null) {
+                log.info("Feedback action {} is not eligible for verification. Eligible: {}, VerificationResult: {}", 
+                        action.getId(), eligible, action.getVerificationResult());
+                continue;
+            }
+
             Map<String, Object> oldValues = snapshotOf(action);
             KpiMeasurement priorMeasurement = measurementRepository.findById(action.getKpiMeasurementId()).orElse(null);
             if (priorMeasurement == null) {

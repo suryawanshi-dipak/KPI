@@ -116,7 +116,14 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
 
   const set = (k) => (e) => {
     const v = e.target.type === "checkbox" ? (e.target.checked ? 1 : 0) : e.target.value;
-    setForm((f) => ({ ...f, [k]: v }));
+    setForm((f) => {
+      const updated = { ...f, [k]: v };
+      // When "Recorded by" (measured_by) changes, also update subject_employee_id to the same value
+      if (k === "measured_by") {
+        updated.subject_employee_id = v;
+      }
+      return updated;
+    });
     setErrors((er) => ({ ...er, [k]: undefined }));
   };
 
@@ -195,16 +202,7 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (form.period_start_date && form.period_end_date && form.period_end_date < form.period_start_date)
       e.period_end_date = "End date can't be before start date.";
     
-    if (!form.subject_employee_id) {
-      e.subject_employee_id = "Select the employee being measured.";
-    } else if (currentUser?.role === "manager" || currentUser?.role === "admin") {
-      const isAssigned = assignments.some(
-        (a) => Number(a.employee_id) === Number(form.subject_employee_id) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
-      );
-      if (!isAssigned) {
-        e.subject_employee_id = "The selected employee is not assigned to this KPI.";
-      }
-    }
+    // subject_employee_id is now auto-synced with measured_by, so validation is inherited from measured_by check
 
     if (!form.measured_by) {
       e.measured_by = "Select who recorded this.";
@@ -319,21 +317,8 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
           <input className="input" type="date" value={form.period_end_date || ""} onChange={set("period_end_date")} />
         </Field>
 
-        <Field label="Employee being measured" required error={errors.subject_employee_id}>
-          <select className={`select ${errors.subject_employee_id ? "invalid" : ""}`}
-            value={form.subject_employee_id} onChange={set("subject_employee_id")}
-            disabled={currentUser?.role === "employee"}>
-            <option value="">Select employee…</option>
-            {filteredPeople.map((p) => {
-              const isDisabled = isPersonDisabledForKpi(p.id);
-              return (
-                <option key={p.id} value={p.id} disabled={isDisabled}>
-                  {p.name}
-                </option>
-              );
-            })}
-          </select>
-        </Field>
+        {/* "Employee being measured" field is hidden and internally linked to "Recorded by" selector */}
+
 
         <Field label="Recorded by" required error={errors.measured_by}>
           <select className={`select ${errors.measured_by ? "invalid" : ""}`}

@@ -24,20 +24,20 @@ public interface KpiFeedbackActionRepository extends JpaRepository<KpiFeedbackAc
     /** Retrieves one active action while hiding rows previously soft deleted. */
     Optional<KpiFeedbackAction> findByIdAndIsDeletedFalse(Long id);
 
-    /** Finds resolved but not yet verified feedback actions for a given metric and subject employee. */
+    /**
+     * Finds active, unverified feedback actions for a given metric and subject employee.
+     * Programmatic checks will determine eligibility based on Jira status or root-cause-only status.
+     */
     @Query("SELECT fa FROM KpiFeedbackAction fa JOIN KpiMeasurement m ON fa.kpiMeasurementId = m.id " +
            "WHERE fa.isDeleted = false " +
-           "AND fa.jiraResolutionCategory = :jiraResolutionCategory " +
-           "AND (fa.verificationResult = :verificationResult OR fa.verificationResult IS NULL) " +
+           "AND fa.verificationResult IS NULL " +
            "AND m.kpiMetric.id = :kpiMetricId " +
            "AND m.subjectEmployeeId = :subjectEmployeeId " +
            "AND m.periodStartDate < :periodStartDate")
     List<KpiFeedbackAction> findResolvedAndUnverified(
             @Param("kpiMetricId") Integer kpiMetricId,
             @Param("subjectEmployeeId") Integer subjectEmployeeId,
-            @Param("periodStartDate") java.time.LocalDate periodStartDate,
-            @Param("jiraResolutionCategory") KpiFeedbackAction.JiraResolutionCategory jiraResolutionCategory,
-            @Param("verificationResult") KpiFeedbackAction.VerificationResult verificationResult);
+            @Param("periodStartDate") java.time.LocalDate periodStartDate);
 }
 
 
