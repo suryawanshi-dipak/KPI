@@ -1,0 +1,116 @@
+{
+  "info": {
+    "_postman_id": "c2d6d6e0-9f54-4a89-9ed4-0777de13bf11",
+    "name": "KPI Feedback Actions API",
+    "description": "Postman requests for the KPI feedback and remediation backend. Set the token variable after logging in through the existing authentication API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/kpi" },
+    { "key": "token", "value": "" },
+    { "key": "kpiMeasurementId", "value": "1" },
+    { "key": "verificationMeasurementId", "value": "2" },
+    { "key": "submittedBy", "value": "1" },
+    { "key": "feedbackActionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create feedback action",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"kpiMeasurementId\": {{kpiMeasurementId}},\n  \"rootCauseSummary\": \"Release validation did not cover the affected regression scenario.\",\n  \"linkedJiraIssueKey\": \"KPI-101\",\n  \"submittedBy\": {{submittedBy}},\n  \"jiraStatusSnapshot\": \"In Progress\",\n  \"verificationResult\": \"pending\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Returns 201 Created', function () { pm.response.to.have.status(201); });",
+              "var body = pm.response.json();",
+              "pm.collectionVariables.set('feedbackActionId', body.data.id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "List feedback actions",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions"
+      }
+    },
+    {
+      "name": "List by source KPI measurement",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions?kpiMeasurementId={{kpiMeasurementId}}"
+      }
+    },
+    {
+      "name": "Get feedback action by ID",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}"
+      }
+    },
+    {
+      "name": "Update Jira status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jiraStatusSnapshot\": \"Done\",\n  \"jiraResolvedAt\": \"2026-08-14T16:00:00\",\n  \"jiraResolutionCategory\": \"fixed\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}/jira-status"
+      }
+    },
+    {
+      "name": "Record verification result",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"verificationResult\": \"improved\",\n  \"verificationKpiMeasurementId\": {{verificationMeasurementId}}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}/verification"
+      }
+    },
+    {
+      "name": "List by verification result",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions?verificationResult=improved"
+      }
+    },
+    {
+      "name": "Soft delete feedback action",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": "{{baseUrl}}/api/v1/kpi-feedback-actions/{{feedbackActionId}}"
+      }
+    }
+  ]
+}

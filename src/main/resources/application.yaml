@@ -28,3 +28,15 @@ spring:
     default-property-inclusion: NON_NULL
     serialization:
       write-dates-as-timestamps: false
+
+# Jira (JiraSyncServiceImpl) — real Jira Cloud instance. Basic Auth is base64(email:token),
+# built automatically since base-url doesn't contain "localhost"/"127.0.0.1".
+# status-mapping values are unverified against this project's actual workflow status names —
+# confirm before relying on the fixed/not-fixed classification.
+jira:
+  base-url: https://audev.atlassian.net
+  email: d.suryawanshi@audev.com
+  token: ATATT3xFfGF0_fFSIfIVes4cC19eX8Hpx1SzlApXkUm5BnFrtYU7EaajHREGxfKTCqbjy-prgskbO8qY3AH0K__20DmBWH12OhAYIT2qEtk0AN_b_1dYdqvnM_P1RD78K9q0peMNHQZrDfwrJNlCBEkWx7MiQ5zah14ZsEvv-0fXlbzEONlFNS4=F1886DB8
+  status-mapping:
+    fixed: Done,Closed,Resolved
+    not-fixed: Won't Fix,Rejected,Cannot Reproduce

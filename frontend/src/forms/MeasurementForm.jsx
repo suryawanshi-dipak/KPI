@@ -15,6 +15,7 @@ const BLANK = {
   raw_payload: "",
   post_action: "",
   measured_by: "",
+  subject_employee_id: "",
   is_pending: 0,
   pending_reason: "",
 };
@@ -26,6 +27,7 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
   const [people, setPeople] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  const [slaModalOpen, setSlaModalOpen] = useState(false);
   // (On-the-fly KPI assignment state variables for admin have been removed as per Option B)
 
   useEffect(() => {
@@ -40,6 +42,11 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (currentUser && !form.measured_by) {
       setTimeout(() => {
         setForm((f) => ({ ...f, measured_by: currentUser.id }));
+      }, 0);
+    }
+    if (currentUser && !form.subject_employee_id) {
+      setTimeout(() => {
+        setForm((f) => ({ ...f, subject_employee_id: currentUser.id }));
       }, 0);
     }
   }, [currentUser]); // eslint-disable-line
@@ -91,10 +98,27 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     );
   }, [assignments, form.kpi_metric_id, form.measured_by]);
 
+  // Looked up from the full KPI list (not the assignment-filtered dropdown options) so that
+  // editing an existing measurement still shows the guided panel/status/SLA button even if the
+  // current viewer isn't assigned to that KPI themselves.
   const kpi = useMemo(
-    () => filteredKpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
-    [filteredKpis, form.kpi_metric_id]
+    () => kpis.find((k) => Number(k.id) === Number(form.kpi_metric_id)),
+    [kpis, form.kpi_metric_id]
   );
+
+  // The dropdown only offers KPIs the current viewer may pick, but when editing an existing
+  // measurement whose KPI isn't in that filtered set, splice it in so the <select> shows the
+  // correct selection instead of falling back to the blank placeholder.
+  const selectableKpis = useMemo(() => {
+    if (!form.kpi_metric_id) return filteredKpis;
+    if (filteredKpis.some((k) => Number(k.id) === Number(form.kpi_metric_id))) return filteredKpis;
+    return kpi ? [...filteredKpis, kpi] : filteredKpis;
+  }, [filteredKpis, form.kpi_metric_id, kpi]);
+
+  // Only KPIs that are literally SLA-compliance metrics (e.g. "Customer Ticket Resolution SLA
+  // Compliance") get the calculator — not every Zendesk-sourced KPI that merely mentions SLA
+  // in its instructions (e.g. "Ticket Handling Accuracy").
+  const isSlaKpi = !!kpi && /\bsla\b/i.test(kpi.name || "");
 
   // Live status preview (frontend mirror of backend rule)
   const previewStatus = useMemo(() => {
@@ -110,7 +134,14 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
 
   const set = (k) => (e) => {
     const v = e.target.type === "checkbox" ? (e.target.checked ? 1 : 0) : e.target.value;
-    setForm((f) => ({ ...f, [k]: v }));
+    setForm((f) => {
+      const updated = { ...f, [k]: v };
+      // When "Recorded by" (measured_by) changes, also update subject_employee_id to the same value
+      if (k === "measured_by") {
+        updated.subject_employee_id = v;
+      }
+      return updated;
+    });
     setErrors((er) => ({ ...er, [k]: undefined }));
   };
 
@@ -189,11 +220,11 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
     if (form.period_start_date && form.period_end_date && form.period_end_date < form.period_start_date)
       e.period_end_date = "End date can't be before start date.";
     
+    // subject_employee_id is now auto-synced with measured_by, so validation is inherited from measured_by check
+
     if (!form.measured_by) {
       e.measured_by = "Select who recorded this.";
     } else if (currentUser?.role === "manager" || currentUser?.role === "admin") {
-      // Validate that the chosen user is actually assigned to the KPI before recording a measurement.
-      // This applies to both managers and admins under the restricted selector.
       const isAssigned = assignments.some(
         (a) => Number(a.employee_id) === Number(form.measured_by) && Number(a.kpi_metric_id) === Number(form.kpi_metric_id)
       );
@@ -217,21 +248,32 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
       kpi_metric_version: kpi?.version ?? 1,
       measured_value: form.is_pending ? null : Number(form.measured_value),
       measured_by: Number(form.measured_by),
+      subject_employee_id: Number(form.subject_employee_id),
       status: form.is_pending ? "unknown" : previewStatus,
     });
   }
 
   return (
+    <>
     <form onSubmit={submit} noValidate>
       <div className="form-grid">
         <Field label="KPI" required error={errors.kpi_metric_id} full>
           <select className={`select ${errors.kpi_metric_id ? "invalid" : ""}`}
             value={form.kpi_metric_id} onChange={set("kpi_metric_id")} disabled={!!lockedKpiId}>
             <option value="">Select the KPI to measure…</option>
-            {filteredKpis.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+            {selectableKpis.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
           </select>
         </Field>
       </div>
+
+      {/* Only for KPIs that are actually SLA-compliance metrics */}
+      {isSlaKpi && (
+        <div style={{ marginTop: "0.9rem", display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="btn btn--ghost" onClick={() => setSlaModalOpen(true)}>
+            Calculate SLA
+          </button>
+        </div>
+      )}
 
       {/* Guided context panel — pulled from the KPI definition */}
       {kpi && (
@@ -303,15 +345,15 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
           <input className="input" type="date" value={form.period_end_date || ""} onChange={set("period_end_date")} />
         </Field>
 
+        {/* "Employee being measured" field is hidden and internally linked to "Recorded by" selector */}
+
+
         <Field label="Recorded by" required error={errors.measured_by}>
           <select className={`select ${errors.measured_by ? "invalid" : ""}`}
             value={form.measured_by} onChange={set("measured_by")}
             disabled={currentUser?.role === "employee"}>
             <option value="">Select person…</option>
             {filteredPeople.map((p) => {
-              // Determine if this team member is unassigned to the current KPI being measured.
-              // If they are not assigned, we disable their option to prevent managers from recording
-              // measurements on their behalf, while keeping them visible in the list.
               const isDisabled = isPersonDisabledForKpi(p.id);
               return (
                 <option key={p.id} value={p.id} disabled={isDisabled}>
@@ -320,8 +362,6 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
               );
             })}
           </select>
-
-          {/* (Admin helper UI banner/Assign button removed as per Option B) */}
         </Field>
 
         <div className="field">
@@ -364,6 +404,145 @@ export default function MeasurementForm({ initial, lockedKpiId, onSubmit, onCanc
 
       {/* (Nested assignment modal for admin has been removed as per Option B) */}
     </form>
+
+    {slaModalOpen && (
+      <SlaCalculatorModal
+        defaultFrom={form.period_start_date}
+        defaultTo={form.period_end_date}
+        onClose={() => setSlaModalOpen(false)}
+        onApply={({ measuredValue, rawPayload, measurementNote }) => {
+          setForm((f) => ({
+            ...f,
+            measured_value: measuredValue,
+            raw_payload: rawPayload,
+            measurement_note: measurementNote,
+          }));
+          setErrors((er) => ({ ...er, measured_value: undefined }));
+          setSlaModalOpen(false);
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+/* SLA compliance calculator — pulls live figures from the Zendesk SLA reporting API for the
+   chosen date range and pushes them straight into Measured value / Raw payload / Measurement
+   note instead of requiring manual entry. */
+const SLA_KPI_URL = "https://web.audev.com/zendesk/api/sla/kpi";
+const SLA_BREACH_URL = "https://web.audev.com/zendesk/api/sla/breach-reasons";
+
+function SlaCalculatorModal({ defaultFrom, defaultTo, onClose, onApply }) {
+  const [from, setFrom] = useState(defaultFrom || "");
+  const [to, setTo] = useState(defaultTo || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [kpiData, setKpiData] = useState(null);
+  const [breachData, setBreachData] = useState(null);
+
+  async function fetchSla() {
+    if (!from || !to) {
+      setError("Pick both a from and to date.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setKpiData(null);
+    setBreachData(null);
+    try {
+      const qs = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const [kpiRes, breachRes] = await Promise.all([
+        fetch(`${SLA_KPI_URL}${qs}`),
+        fetch(`${SLA_BREACH_URL}${qs}`),
+      ]);
+      if (!kpiRes.ok) throw new Error(`SLA KPI request failed (${kpiRes.status})`);
+      if (!breachRes.ok) throw new Error(`Breach-reasons request failed (${breachRes.status})`);
+      const [kpi, breach] = await Promise.all([kpiRes.json(), breachRes.json()]);
+      setKpiData(kpi);
+      setBreachData(breach);
+    } catch (err) {
+      setError(err.message || "Could not reach the SLA reporting API.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function apply() {
+    if (!kpiData) return;
+    const breakdownLines = (breachData?.breakdown || [])
+      .map((b) => `- ${b.reason}: ${b.count}`)
+      .join("\n");
+    const measurementNote =
+      `Total breached: ${breachData?.totalBreached ?? 0}` +
+      (breakdownLines ? `\nBreakdown:\n${breakdownLines}` : "");
+
+    onApply({
+      measuredValue: kpiData.slaCompliancePct,
+      rawPayload: JSON.stringify(kpiData, null, 2),
+      measurementNote,
+    });
+  }
+
+  return (
+    <Modal title="Calculate SLA" subtitle="Live figures from the Zendesk SLA reporting API" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <Field label="From" full>
+            <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+          <Field label="To" full>
+            <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+        </div>
+
+        <button type="button" className="btn btn--ghost" onClick={fetchSla} disabled={loading} style={{ alignSelf: "flex-start" }}>
+          {loading ? "Fetching…" : "Fetch SLA data"}
+        </button>
+
+        {error && <span className="field-error">{error}</span>}
+
+        {kpiData && (
+          <div className="preview-panel">
+            <div className="preview-panel__row">
+              <span className="k">SLA compliance</span>
+              <span className="v mono">{kpiData.slaCompliancePct}%</span>
+            </div>
+            <div className="preview-panel__row">
+              <span className="k">Met / Closed</span>
+              <span className="v mono">{kpiData.slaMet} / {kpiData.totalClosed}</span>
+            </div>
+            <div className="preview-panel__row">
+              <span className="k">Breached</span>
+              <span className="v mono">{kpiData.slaBreached}</span>
+            </div>
+            <div className="preview-panel__row">
+              <span className="k">Avg elapsed</span>
+              <span className="v mono">{kpiData.avgElapsedMinutes} min</span>
+            </div>
+            {breachData?.breakdown?.length > 0 && (
+              <div style={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--rule)" }}>
+                <div className="k" style={{ color: "var(--muted)", fontSize: "0.76rem", marginBottom: "0.2rem" }}>
+                  Breach reasons ({breachData.totalBreached})
+                </div>
+                {breachData.breakdown.map((b, i) => (
+                  <div key={i} className="preview-panel__row">
+                    <span className="k">{b.reason}</span>
+                    <span className="v mono">{b.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="form-actions">
+        <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn--primary" onClick={apply} disabled={!kpiData}>
+          Use this value
+        </button>
+      </div>
+    </Modal>
   );
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }

@@ -4,9 +4,11 @@ import Kpis from "./pages/Kpis";
 import KpiDetail from "./pages/KpiDetail";
 import Kras from "./pages/Kras";
 import Measurements from "./pages/Measurements";
+import ProactiveWork from "./pages/ProactiveWork";
 import Team from "./pages/Team";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
+import Feedbacks from "./pages/Feedbacks";
 import LoginScreen from "./pages/LoginScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -20,9 +22,11 @@ export default function App() {
         <Route path="/kpis/:id" element={<ProtectedRoute><KpiDetail /></ProtectedRoute>} />
         <Route path="/kras" element={<ProtectedRoute><Kras /></ProtectedRoute> } />
         <Route path="/measurements" element={<ProtectedRoute><Measurements /></ProtectedRoute>} />
+        <Route path="/proactive-work" element={<ProtectedRoute><ProactiveWork /></ProtectedRoute>} />
         <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
         <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+        <Route path="/feedbacks" element={<ProtectedRoute><Feedbacks /></ProtectedRoute>} />
         <Route path="/login" element={<LoginScreen />} />
         <Route path="/index.html" element={<Navigate to="/" replace />} />
       </Routes>

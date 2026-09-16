@@ -5,7 +5,8 @@ import Layout from "../components/Layout";
 import { Modal, Spinner, StatusPill, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import MeasurementForm from "../forms/MeasurementForm";
-import { getCurrentUser, getKpi, listEmployees, measurementsForKpi, saveMeasurement, kraName, employeeName, listAssignments } from "../lib/store";
+import ProactiveWorkForm from "../forms/ProactiveWorkForm";
+import { getCurrentUser, getKpi, listEmployees, measurementsForKpi, saveMeasurement, kraName, employeeName, listAssignments, saveProactiveWorkEntry } from "../lib/store";
 
 /**
  * Build the "View by employee" dropdown options for manager/admin users.
@@ -88,6 +89,8 @@ export default function KpiDetail() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  const [loggingProactive, setLoggingProactive] = useState(false);
+  const [savingProactive, setSavingProactive] = useState(false);
 
   const load = async () => {
     const [kpiData, measurementsData, user, employeesList, assignmentsList] = await Promise.all([
@@ -136,6 +139,17 @@ export default function KpiDetail() {
   useEffect(() => { load(); }, [id, location.search]);
   function flash(m){ setToast(m); setTimeout(()=>setToast(null),2400); }
   async function handleSave(p){ setSaving(true); await saveMeasurement(p); setSaving(false); setAdding(false); await load(); flash("Measurement saved"); }
+  async function handleSaveProactive(p) {
+    setSavingProactive(true);
+    try {
+      await saveProactiveWorkEntry(p);
+      setLoggingProactive(false);
+      await load();
+      flash("Proactive work logged");
+    } finally {
+      setSavingProactive(false);
+    }
+  }
 
   if (!kpi) return <Layout crumb={<b>KPI</b>}><Spinner /></Layout>;
 
@@ -174,6 +188,12 @@ export default function KpiDetail() {
     }));
 
   const latest = sortedActiveMs[sortedActiveMs.length - 1];
+
+  // FR-PW-12: flattened across every measurement of this KPI (not just the currently-viewed
+  // employee's) — RBAC-filtered per viewer already, server-side, in KpiMeasurementServiceImpl.
+  const proactiveEntries = ms.flatMap((m) =>
+    (m.proactive_work_entries || []).map((pe) => ({ ...pe, period: m.measurement_period_label }))
+  );
 
   return (
     <Layout crumb={<><span onClick={()=>nav("/kpis")} style={{cursor:"pointer"}}>KPIs</span> · <b>{kpi.name}</b></>}>
@@ -275,9 +295,38 @@ export default function KpiDetail() {
         </div>
       </div>
 
+      <div className="card" style={{ marginTop: "1.1rem" }}>
+        <div className="card__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>Proactive work linked to this KPI</h3>
+          <button className="btn btn--ghost" onClick={() => setLoggingProactive(true)}>
+            <Icon.plus /> Log proactive work
+          </button>
+        </div>
+        <div className="card__body">
+          {proactiveEntries.length === 0 ? (
+            <p className="cell-sub">No proactive work logged against this KPI yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {proactiveEntries.map((pe) => (
+                <div key={pe.id} style={{ borderBottom: "1px solid var(--rule)", paddingBottom: "0.6rem" }}>
+                  <div className="cell-strong">{pe.title}</div>
+                  <div className="cell-sub">{pe.subject_employee_name} · {pe.period} · logged by {pe.logged_by_name}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {adding && (
         <Modal title="Enter measurement" subtitle={kpi.name} onClose={()=>setAdding(false)} wide>
           <MeasurementForm lockedKpiId={kpi.id} saving={saving} onSubmit={handleSave} onCancel={()=>setAdding(false)} />
+        </Modal>
+      )}
+      {loggingProactive && (
+        <Modal title="Log proactive work" subtitle="Something you did that no KPI would show." onClose={() => setLoggingProactive(false)}>
+          <ProactiveWorkForm currentUser={currentUser} lockedKpiMeasurementId={latest?.id}
+            saving={savingProactive} onSubmit={handleSaveProactive} onCancel={() => setLoggingProactive(false)} />
         </Modal>
       )}
       {toast && <Toast message={toast} />}

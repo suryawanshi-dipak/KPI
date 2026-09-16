@@ -9,7 +9,9 @@ const NAV = [
   { to: "/kpis", label: "KPIs", icon: Icon.kpi },
   { to: "/kras", label: "KRA Areas", icon: Icon.kra },
   { to: "/measurements", label: "Measurements", icon: Icon.measure },
+  { to: "/proactive-work", label: "Proactive Work", icon: Icon.proactive },
   { to: "/team", label: "Team", icon: Icon.team },
+  { to: "/feedbacks", label: "KPI Feedbacks", icon: Icon.feedback },
 ];
 const ADMIN_NAV = [
   { to: "/employees", label: "Employees", icon: Icon.team },
