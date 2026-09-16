@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -59,4 +60,9 @@ public class KpiMeasurementResponse {
     private LocalDateTime updatedAt;
     private Integer createdBy;
     private Integer updatedBy;
+
+    // FR-PW-12: proactive work entries linked to this measurement, embedded so the KPI-detail
+    // widget costs zero additional round trips. Populated only by getByMetricId — see
+    // KpiMeasurementServiceImpl.
+    private List<ProactiveWorkEntrySummaryResponse> proactiveWorkEntries;
 }

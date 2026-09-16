@@ -42,6 +42,10 @@ export const ENUMS = {
   periodType: ["weekly", "bi-weekly", "monthly", "per release"],
   team: ["Scrum", "Kanban", "Operations"],
   measurementStatus: ["green", "amber", "red", "critical", "unknown"],
+  proactiveWorkCategory: [
+    "ATTENDANCE_PUNCTUALITY", "TEAM_SUPPORT", "INITIATIVE_IDEA",
+    "EXTRA_HOURS", "RESOURCE_SAVING", "PROCESS_IMPROVEMENT", "OTHER",
+  ],
 };
 
 
@@ -221,6 +225,22 @@ function mapKpiToFrontend(b) {
 }
 
 
+// Maps a proactive work entry summary (embedded in a measurement response) to Frontend
+function mapProactiveWorkSummaryToFrontend(b) {
+  if (!b) return null;
+  return {
+    id: b.id,
+    title: b.title,
+    description: b.description,
+    category: b.category,
+    subject_employee_name: b.subjectEmployeeName,
+    logged_by_name: b.loggedByName,
+    effort_start_date: b.effortStartDate,
+    effort_end_date: b.effortEndDate,
+    is_highlighted: b.isHighlighted ? 1 : 0,
+  };
+}
+
 // Mapped KPI measurement database response to Frontend
 
 function mapMeasurementToFrontend(b) {
@@ -254,7 +274,10 @@ function mapMeasurementToFrontend(b) {
     is_corrected: b.isCorrected ? 1 : 0,
     corrected_from_id: b.correctedFromId,
     created_at: b.createdAt,
-    updated_at: b.updatedAt
+    updated_at: b.updatedAt,
+    // FR-PW-12 — entries logged against this measurement, embedded so the KPI-detail widget
+    // costs zero extra round trips.
+    proactive_work_entries: (b.proactiveWorkEntries || []).map(mapProactiveWorkSummaryToFrontend),
   };
 }
 
@@ -1648,6 +1671,119 @@ export async function recordVerification(id, payload) {
     console.error("recordVerification error:", err);
     throw err;
   }
+}
+
+/* ────────────────────────────────────────────────────────────
+   PROACTIVE WORK LOG API INTEGRATION (Increment 1)
+   ──────────────────────────────────────────────────────────── */
+
+function mapProactiveWorkToFrontend(b) {
+  if (!b) return null;
+  return {
+    id: b.id,
+    kpi_measurement_id: b.kpiMeasurementId,
+    kpi_metric_name: b.kpiMetricName,
+    kpi_measurement_period_label: b.kpiMeasurementPeriodLabel,
+    entry_type: b.entryType,
+    category: b.category,
+    other_category_text: b.otherCategoryText,
+    subject_employee_id: b.subjectEmployeeId,
+    subject_employee_name: b.subjectEmployeeName,
+    logged_by_id: b.loggedById,
+    logged_by_name: b.loggedByName,
+    title: b.title,
+    description: b.description,
+    effort_start_date: b.effortStartDate,
+    effort_end_date: b.effortEndDate,
+    is_seen: b.isSeen ? 1 : 0,
+    seen_at: b.seenAt,
+    seen_by_id: b.seenById,
+    is_highlighted: b.isHighlighted ? 1 : 0,
+    highlighted_at: b.highlightedAt,
+    created_at: b.createdAt,
+    updated_at: b.updatedAt,
+  };
+}
+
+/**
+ * Fetch active proactive work entries within the caller's RBAC scope.
+ * subjectEmployeeId narrows that scope; it can never widen it (server-enforced).
+ */
+export async function listProactiveWork(filters = {}) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const params = [];
+  if (filters.subjectEmployeeId != null) params.push(`subjectEmployeeId=${filters.subjectEmployeeId}`);
+  if (filters.unseenOnly) params.push(`unseenOnly=true`);
+  if (filters.highlightedOnly) params.push(`highlightedOnly=true`);
+  const qs = params.length ? `?${params.join("&")}` : "";
+  const res = await fetch(`${API_BASE}/proactive-work${qs}`, { headers });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to fetch proactive work entries");
+  }
+  const json = await res.json();
+  return (json.data || []).map(mapProactiveWorkToFrontend);
+}
+
+/**
+ * Fetch a single proactive work entry. For a manager/admin viewing a report's entry, this is
+ * also the FR-PW-06 auto-seen trigger (server-side, once only).
+ */
+export async function getProactiveWorkEntry(id) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/${id}`, { headers });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || `Failed to fetch proactive work entry ${id}`);
+  }
+  const json = await res.json();
+  return mapProactiveWorkToFrontend(json.data);
+}
+
+/** Create-only — Increment 1 has no edit/delete endpoint. */
+export async function saveProactiveWorkEntry(payload) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const body = {
+    subjectEmployeeId: Number(payload.subject_employee_id),
+    category: payload.category,
+    otherCategoryText: payload.category === "OTHER" ? payload.other_category_text : null,
+    title: payload.title,
+    description: payload.description,
+    effortStartDate: payload.effort_start_date,
+    effortEndDate: payload.effort_end_date || payload.effort_start_date,
+    kpiMeasurementId: payload.kpi_measurement_id ? Number(payload.kpi_measurement_id) : null,
+  };
+  const res = await fetch(`${API_BASE}/proactive-work`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to log proactive work");
+  }
+  const json = await res.json();
+  return mapProactiveWorkToFrontend(json.data);
+}
+
+/** Manager/admin only server-side — see BRD §8.3 RBAC matrix (Seen/Highlight: Employee = No). */
+export async function setProactiveWorkHighlighted(id, highlighted) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/${id}/highlight`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ highlighted }),
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to update highlight");
+  }
+  const json = await res.json();
+  return mapProactiveWorkToFrontend(json.data);
 }
 
 

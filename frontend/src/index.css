@@ -766,3 +766,17 @@ table.data tbody tr:hover{background:var(--surface-2)}
   }
 }
 
+/* Proactive Work Log */
+.pill--new{color:var(--primary);background:var(--primary-bg)}
+.pwe-row--unseen{box-shadow:inset 3px 0 0 var(--primary)}
+.pwe-desc{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwe-kpi-chip{color:var(--primary);background:var(--primary-bg);padding:.15rem .5rem;border-radius:999px;font-size:.78rem;font-weight:500}
+.pwe-star{background:transparent}
+
+/* Team summary grid (FR-PW-11) — a counts grid, not a score: no red/green semantics */
+.team-summary-grid th,.team-summary-grid td{text-align:center}
+.team-summary-grid th:first-child,.team-summary-grid td:first-child{text-align:left}
+.team-summary-grid__cell{min-width:60px;transition:background .15s}
+.team-summary-grid__zero{color:var(--muted)}
+.team-summary-grid__star{color:#f5a623;font-weight:600}
+
