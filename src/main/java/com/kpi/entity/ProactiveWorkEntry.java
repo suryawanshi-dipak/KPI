@@ -2,6 +2,7 @@ package com.kpi.entity;
 
 import com.kpi.entity.enums.ProactiveWorkCategory;
 import com.kpi.entity.enums.ProactiveWorkEntryType;
+import com.kpi.entity.enums.ProactiveWorkVisibility;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -57,11 +58,22 @@ public class ProactiveWorkEntry {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
+    // v2 — "What did it change?" Free text, optional: requiring it invites an invented benefit.
+    @Column(name = "value_statement", length = 200)
+    private String valueStatement;
+
     @Column(name = "effort_start_date", nullable = false)
     private LocalDate effortStartDate;
 
     @Column(name = "effort_end_date", nullable = false)
     private LocalDate effortEndDate;
+
+    // v2 — default ORGANISATION (visible to everyone); PRIVATE restores v1's own-entries scope
+    // and suppresses endorse/comment entirely.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private ProactiveWorkVisibility visibility = ProactiveWorkVisibility.ORGANISATION;
 
     @Column(name = "is_seen", nullable = false)
     @Builder.Default
@@ -86,6 +98,21 @@ public class ProactiveWorkEntry {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    // v2 — null until the first content edit; drives the "Edited 12 Sep" line. updated_at also
+    // moves on seen/highlight, so it can't do this job.
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    // v2 — denormalised so the list/summary render counts without a subquery per row.
+    // Recalculated on every endorse/withdraw or comment create/delete, same transaction.
+    @Column(name = "endorsement_count", nullable = false)
+    @Builder.Default
+    private Integer endorsementCount = 0;
+
+    @Column(name = "comment_count", nullable = false)
+    @Builder.Default
+    private Integer commentCount = 0;
+
     @Column(name = "is_deleted", nullable = false)
     @Builder.Default
     private Boolean isDeleted = false;
@@ -98,6 +125,9 @@ public class ProactiveWorkEntry {
         if (isSeen == null) isSeen = false;
         if (isHighlighted == null) isHighlighted = false;
         if (isDeleted == null) isDeleted = false;
+        if (visibility == null) visibility = ProactiveWorkVisibility.ORGANISATION;
+        if (endorsementCount == null) endorsementCount = 0;
+        if (commentCount == null) commentCount = 0;
     }
 
     @PreUpdate

@@ -34,24 +34,27 @@ function formatCutoff(days) {
 }
 
 /**
- * FR-PW-11 (BRD v2.0, Increment 3) — Manager role only, their own team.
+ * FR-PW-11, now open to Admin too (v2 change 3) — Manager sees their own team; Admin sees the
+ * whole organisation, with a department selector since "everyone" is several hundred rows and
+ * not a useful default.
  *
  * "A counts grid, not a score." Cell shading reflects density only (a single neutral tint
  * scaled to that cell's count against the grid's max), never red/green semantics. The Total
  * column is last and the grid is never sorted by it — the useful read is the shape of a row,
  * not a ranking. Employees with zero entries in the period are omitted from the grid (a row
- * of all zeros isn't a "shape") and surfaced only in the footer count.
+ * of all zeros isn't a "shape") and surfaced only in the footer count. The Endorsements column
+ * only exists once peer endorsement does — it's a sum of each row's own entries' counts, not a
+ * ranking either.
  *
- * Fetches its own unfiltered team data rather than reusing ProactiveWork.jsx's `entries` state
- * — that state gets narrowed whenever the manager filters the main list to one employee, which
- * would silently make this grid wrong for everyone else on the team. One extra cheap call
- * against the existing manager-scoped GET /api/v1/proactive-work; no new backend endpoint.
- *
- * Rendered as the body of a Modal (see ProactiveWork.jsx) — no card wrapper of its own, since
- * the modal shell already supplies the title/close chrome.
+ * Fetches its own data via the legacy (no-scope) list call: for a manager that's still
+ * exactly "my team" unpaged; for an admin it's every entry in the system unpaged (the same
+ * "everything" behaviour admin already had before v2's tabs existed), filtered to a department
+ * client-side the same way the manager case already filters to direct reports. Rendered as the
+ * body of a Modal (see ProactiveWork.jsx) — no card wrapper of its own.
  */
 export default function TeamSummaryPanel({ currentUser, employees }) {
   const [days, setDays] = useState(90);
+  const [department, setDepartment] = useState("all");
   const [entries, setEntries] = useState(null);
 
   useEffect(() => {
@@ -60,10 +63,19 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
     return () => { active = false; };
   }, []);
 
-  const team = useMemo(
-    () => employees.filter((e) => Number(e.managerId) === Number(currentUser.id)),
-    [employees, currentUser]
-  );
+  const isAdmin = currentUser.role === "admin";
+
+  const departments = useMemo(() => {
+    const set = new Set(employees.map((e) => e.department).filter(Boolean));
+    return [...set].sort();
+  }, [employees]);
+
+  const team = useMemo(() => {
+    if (isAdmin) {
+      return department === "all" ? employees : employees.filter((e) => e.department === department);
+    }
+    return employees.filter((e) => Number(e.managerId) === Number(currentUser.id));
+  }, [employees, currentUser, isAdmin, department]);
 
   const inRange = useMemo(() => {
     if (!entries) return [];
@@ -86,6 +98,7 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
           counts,
           total: empEntries.length,
           highlighted: empEntries.filter((e) => e.is_highlighted).length,
+          endorsements: empEntries.reduce((sum, e) => sum + (e.endorsement_count || 0), 0),
         };
       })
       .filter((row) => row.total > 0)
@@ -101,28 +114,47 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
     return max;
   }, [rows]);
 
+  const maxEndorsements = useMemo(
+    () => rows.reduce((max, r) => Math.max(max, r.endorsements), 0),
+    [rows]
+  );
+
   function cellStyle(count) {
     if (!count) return {};
     const intensity = 0.12 + 0.55 * (count / maxCount);
     return { background: `rgba(58, 91, 217, ${intensity.toFixed(2)})` };
   }
 
+  function barWidth(count) {
+    if (!count || !maxEndorsements) return 0;
+    return Math.round(8 + 66 * (count / maxEndorsements));
+  }
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.9rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.9rem", flexWrap: "wrap", gap: "0.6rem" }}>
         <span className="cell-sub">last {days} days</span>
-        <select className="select" style={{ width: "auto" }}
-          value={days} onChange={(e) => setDays(Number(e.target.value))}>
-          {PERIOD_OPTIONS.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {isAdmin && departments.length > 0 && (
+            <select className="select" style={{ width: "auto" }}
+              value={department} onChange={(e) => setDepartment(e.target.value)}>
+              <option value="all">All departments</option>
+              {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+          <select className="select" style={{ width: "auto" }}
+            value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
       <div>
         {entries === null ? (
           <p className="cell-sub">Loading…</p>
         ) : rows.length === 0 ? (
-          <p className="cell-sub">Nobody on your team has logged proactive work in this period.</p>
+          <p className="cell-sub">Nobody in scope has logged proactive work in this period.</p>
         ) : (
           <div className="table-wrap">
             <table className="data team-summary-grid">
@@ -132,6 +164,7 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
                   {CATEGORY_ORDER.map((c) => <th key={c}>{CATEGORY_SHORT_LABELS[c]}</th>)}
                   <th>Total</th>
                   <th>★</th>
+                  <th style={{ textAlign: "left" }}>Endorsements</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,6 +178,16 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
                     ))}
                     <td className="mono cell-strong">{row.total}</td>
                     <td className="mono team-summary-grid__star">{row.highlighted}</td>
+                    <td>
+                      {row.endorsements > 0 ? (
+                        <>
+                          <span className="team-summary-grid__bar" style={{ width: `${barWidth(row.endorsements)}px` }} />
+                          <span className="mono cell-sub" style={{ marginLeft: "0.4rem" }}>{row.endorsements}</span>
+                        </>
+                      ) : (
+                        <span className="team-summary-grid__zero">0</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -156,7 +199,7 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
             A thin row usually means little was logged, not that little happened.
             {zeroCount > 0 && (
               <>
-                {" "}{zeroCount} {zeroCount === 1 ? "person" : "people"} on your team{" "}
+                {" "}{zeroCount} {zeroCount === 1 ? "person" : "people"} in scope{" "}
                 {zeroCount === 1 ? "has" : "have"} no entries at all this period.
               </>
             )}

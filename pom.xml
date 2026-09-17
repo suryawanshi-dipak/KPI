@@ -99,6 +99,15 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Web Push (RFC 8291/8292 VAPID + payload encryption) — an open-source implementation
+             of the standard, not a vendor: no account, no SaaS endpoint, sends straight to
+             whichever push service (FCM/Mozilla/Apple) the recipient's browser assigned. -->
+        <dependency>
+            <groupId>nl.martijndwars</groupId>
+            <artifactId>webpush</artifactId>
+            <version>5.1.1</version>
+        </dependency>
+
         <!-- Testcontainers — proactive_work_entry @DataJpaTest runs against real MySQL 8 so
              validate-mode schema checks are real, not H2's approximation -->
         <dependency>

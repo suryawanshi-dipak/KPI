@@ -6,5 +6,6 @@ public enum ProactiveWorkAuditActionType {
     SEEN,
     HIGHLIGHT_ON,
     HIGHLIGHT_OFF,
-    DELETE
+    DELETE,
+    VISIBILITY_CHANGE
 }
