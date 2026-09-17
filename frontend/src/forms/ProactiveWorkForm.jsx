@@ -104,6 +104,7 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
       e.other_category_text = "Tell us what kind of work this was.";
     if (!form.subject_employee_id) e.subject_employee_id = "Choose who to credit this to.";
     if (!form.description.trim()) e.description = "Add a few details.";
+    if (!form.value_statement.trim()) e.value_statement = "Tell us what changed as a result.";
     if (!form.effort_start_date) e.effort_start_date = "Pick a date.";
     if (multiDay) {
       if (!form.effort_end_date) e.effort_end_date = "Pick the last day.";
@@ -171,11 +172,11 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
             placeholder="What happened, and why it mattered." />
         </Field>
 
-        <Field label="What did it change?" hint="optional" full>
-          <input className="input" maxLength={200}
+        <Field label="What did it change?" required error={errors.value_statement} full>
+          <input className={`input ${errors.value_statement ? "invalid" : ""}`} maxLength={200}
             value={form.value_statement} onChange={set("value_statement")}
             placeholder="e.g. Saves the support team around 3 hours a week" />
-          <span className="hint">The outcome, in one line. Leave it empty if there isn't a clean answer.</span>
+          <span className="hint">The outcome, in one line.</span>
         </Field>
 
         <Field label="When" required error={errors.effort_start_date}>

@@ -101,7 +101,11 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
   // The endorse/comment controls are absent entirely on a PRIVATE entry, for everyone — not
   // greyed out for whoever happens to be able to view it (subject's manager, admin).
   const canEndorse = !isPrivate && !isSubject;
-  const canEdit = isAuthor || isAdmin;
+  // Edit is only ever shown to whoever logged the entry — not the subject, not an admin viewing
+  // it. The server still allows an admin to edit via the API as a support/correction safety
+  // valve (ProactiveWorkServiceImpl#update), but that's a deliberately separate concern from
+  // what this button shows.
+  const canEdit = isAuthor;
   const endorserCount = entry.endorsers?.length || 0;
   const commentCount = (entry.comments || []).filter((c) => !c.is_deleted).length;
 

@@ -102,6 +102,7 @@ class ProactiveWorkServiceImplTest {
                 .category(ProactiveWorkCategory.TEAM_SUPPORT)
                 .title("Covered the on-call rotation")
                 .description("Filled in for a sick teammate.")
+                .valueStatement("Kept the on-call queue from backing up overnight.")
                 .effortStartDate(LocalDate.of(2026, 9, 8))
                 .build();
     }

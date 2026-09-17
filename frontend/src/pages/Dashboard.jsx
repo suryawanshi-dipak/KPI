@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 import Layout from "../components/Layout";
 import { Spinner, StatusPill } from "../components/UI";
+import ProactiveWorkFeed from "../components/ProactiveWorkFeed";
 import { getStats, listKpis, listKras, measurementsForKpi, kraName, listAssignments, listEmployees, getCurrentUser, listMeasurements, employeeName } from "../lib/store";
 
 function buildViewOptions(currentUser, employeesList) {
@@ -394,6 +395,8 @@ const pct = dashboardCounts.totalKpis
 
   return (
     <Layout crumb={<b>Dashboard</b>}>
+    <div className="dashboard-layout">
+    <div className="dashboard-main">
       <div className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
         <div>
           <h1>KPI overview</h1>
@@ -655,6 +658,12 @@ const pct = dashboardCounts.totalKpis
           </table>
         </div>
       </div>
+    </div>
+
+    <div className="dashboard-side">
+      <ProactiveWorkFeed currentUser={currentUser} employees={employees} />
+    </div>
+    </div>
     </Layout>
   );
 }
