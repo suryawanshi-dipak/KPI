@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import { Modal, Spinner, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
@@ -14,6 +15,7 @@ import {
   saveProactiveWorkEntry,
   setProactiveWorkHighlighted,
 } from "../lib/store";
+import { triggerPermissionPromptIfFirstTime } from "../lib/pushNotifications";
 
 const CATEGORY_LABELS = {
   ATTENDANCE_PUNCTUALITY: "Attendance & Punctuality",
@@ -46,6 +48,7 @@ const TABS = [
 ];
 
 export default function ProactiveWork() {
+  const { id } = useParams();
   const [currentUser, setCurrentUser] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [tab, setTab] = useState("my-team");
@@ -58,10 +61,17 @@ export default function ProactiveWork() {
   const [editingEntry, setEditingEntry] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-  const [viewingId, setViewingId] = useState(null);
+  const [viewingId, setViewingId] = useState(id ? Number(id) : null);
   const [viewingEntry, setViewingEntry] = useState(null);
   const [viewingLoading, setViewingLoading] = useState(false);
   const [showTeamSummary, setShowTeamSummary] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      setViewingId(Number(id));
+      triggerPermissionPromptIfFirstTime();
+    }
+  }, [id]);
 
   function flash(m) { setToast(m); setTimeout(() => setToast(null), 2400); }
 
@@ -294,7 +304,7 @@ export default function ProactiveWork() {
               <tbody>
                 {filtered.map((e) => (
                   <tr key={e.id} className={!e.is_seen ? "pwe-row--unseen" : ""}
-                    style={{ cursor: "pointer" }} onClick={() => setViewingId(e.id)}>
+                    style={{ cursor: "pointer" }} onClick={() => { setViewingId(e.id); triggerPermissionPromptIfFirstTime(); }}>
                     <td>
                       <div className="cell-strong">{e.title}</div>
                       <div className="cell-sub pwe-desc">{e.description}</div>

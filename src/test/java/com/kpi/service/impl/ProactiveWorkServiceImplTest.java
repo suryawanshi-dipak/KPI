@@ -47,6 +47,7 @@ class ProactiveWorkServiceImplTest {
     @Mock private EmployeeRepository employeeRepository;
     @Mock private KpiMeasurementRepository measurementRepository;
     @Mock private ProactiveWorkAuditService auditService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private Validator validator;
     private ProactiveWorkServiceImpl service;
@@ -58,7 +59,7 @@ class ProactiveWorkServiceImplTest {
         MockitoAnnotations.openMocks(this);
         validator = Validation.buildDefaultValidatorFactory().getValidator();
         service = new ProactiveWorkServiceImpl(entryRepository, endorsementRepository, commentRepository,
-                employeeRepository, measurementRepository, auditService, validator);
+                employeeRepository, measurementRepository, auditService, validator, eventPublisher);
 
         admin = employee(1, Role.admin, null);
         manager = employee(2, Role.manager, null);

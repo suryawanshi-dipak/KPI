@@ -40,3 +40,13 @@ jira:
   status-mapping:
     fixed: Done,Closed,Resolved
     not-fixed: Won't Fix,Rejected,Cannot Reproduce
+
+# Web Push (VapidConfig fails fast at startup if either key is blank).
+# This keypair was generated locally for dev/testing only (openssl ecparam -genkey -name
+# prime256v1, raw point/scalar re-encoded as base64url). Generate a fresh pair for production
+# and never reuse this one — see OPERATIONAL PREREQUISITES for the rotation impact.
+webpush:
+  vapid:
+    public-key: BNM34gdi4_t0YQP7iUe6QnFZhH9yk9VEvMzCtOblaUTh0vi5cLmnu_Z5es7KcbeWxrCpWr6pcO9iQF1er_5EFDE
+    private-key: 2Ip75tCqsJCZcBCt6gf6RipXxf88JaWMI9MoBx8ehyI
+    subject: mailto:d.suryawanshi@audev.com

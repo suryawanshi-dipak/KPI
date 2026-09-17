@@ -17,6 +17,8 @@ import com.kpi.entity.enums.ProactiveWorkCategory;
 import com.kpi.entity.enums.ProactiveWorkEntryType;
 import com.kpi.entity.enums.ProactiveWorkVisibility;
 import com.kpi.entity.enums.Role;
+import com.kpi.entity.enums.NotificationType;
+import com.kpi.event.ProactiveWorkActivityEvent;
 import com.kpi.exception.ProactiveWorkValidationException;
 import com.kpi.exception.ResourceNotFoundException;
 import com.kpi.repository.EmployeeRepository;
@@ -42,6 +44,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import com.kpi.event.ProactiveWorkCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
+
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +66,7 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
     private final KpiMeasurementRepository measurementRepository;
     private final ProactiveWorkAuditService auditService;
     private final Validator validator;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -126,6 +132,9 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
 
         ProactiveWorkEntry saved = entryRepository.save(entry);
         auditService.record(saved.getId(), ProactiveWorkAuditActionType.CREATE, actor.getId(), null, snapshotOf(saved));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new ProactiveWorkCreatedEvent(saved.getId()));
+        }
         return toResponse(saved, actor);
     }
 
@@ -300,6 +309,10 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         auditService.record(saved.getId(),
                 highlighted ? ProactiveWorkAuditActionType.HIGHLIGHT_ON : ProactiveWorkAuditActionType.HIGHLIGHT_OFF,
                 actor.getId(), oldValues, snapshotOf(saved));
+        if (highlighted) {
+            eventPublisher.publishEvent(new ProactiveWorkActivityEvent(
+                    saved.getId(), NotificationType.HIGHLIGHTED_YOURS, actor.getId()));
+        }
         return toDetailResponse(saved, actor);
     }
 
@@ -321,11 +334,13 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         }
 
         Optional<ProactiveWorkEndorsement> existing = endorsementRepository.findByEntryIdAndEmployeeId(id, actor.getId());
+        boolean becameEndorsed = false;
         if (endorsed) {
             if (existing.isPresent()) {
                 if (existing.get().getWithdrawnAt() != null) {
                     existing.get().setWithdrawnAt(null);
                     endorsementRepository.save(existing.get());
+                    becameEndorsed = true;
                 }
             } else {
                 ProactiveWorkEndorsement fresh = ProactiveWorkEndorsement.builder()
@@ -334,6 +349,7 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
                         .subjectEmployeeId(entry.getSubjectEmployeeId())
                         .build();
                 endorsementRepository.save(fresh);
+                becameEndorsed = true;
             }
         } else if (existing.isPresent() && existing.get().getWithdrawnAt() == null) {
             existing.get().setWithdrawnAt(LocalDateTime.now());
@@ -345,6 +361,12 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         // Not audited — endorsements are already attributed, timestamped and never
         // hard-deleted; mirroring them into the audit table would double every write for no
         // extra evidence.
+        if (becameEndorsed) {
+            // Only on an actual state change — calling endorse=true again on an already-active
+            // endorsement is a no-op above and must not re-notify the subject.
+            eventPublisher.publishEvent(new ProactiveWorkActivityEvent(
+                    saved.getId(), NotificationType.ENDORSED_YOURS, actor.getId()));
+        }
         return toDetailResponse(saved, actor);
     }
 
@@ -371,6 +393,10 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
 
         entry.setCommentCount((int) commentRepository.countByEntryIdAndIsDeletedFalse(entryId));
         entryRepository.save(entry);
+        // Self-commenting is allowed (unlike endorsing) and must not notify yourself;
+        // notifyActivity() itself skips when actor == subject, so no check is needed here.
+        eventPublisher.publishEvent(new ProactiveWorkActivityEvent(
+                entryId, NotificationType.COMMENTED_YOURS, actor.getId()));
         return toCommentResponse(saved);
     }
 

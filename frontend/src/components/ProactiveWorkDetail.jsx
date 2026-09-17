@@ -5,6 +5,7 @@ import {
   editProactiveWorkComment,
   deleteProactiveWorkComment,
 } from "../lib/store";
+import { triggerPermissionPromptIfFirstTime } from "../lib/pushNotifications";
 
 const CATEGORY_LABELS = {
   ATTENDANCE_PUNCTUALITY: "Attendance & Punctuality",
@@ -105,6 +106,7 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
   const commentCount = (entry.comments || []).filter((c) => !c.is_deleted).length;
 
   async function handleEndorseToggle() {
+    triggerPermissionPromptIfFirstTime();
     setBusy(true);
     setError(null);
     try {
