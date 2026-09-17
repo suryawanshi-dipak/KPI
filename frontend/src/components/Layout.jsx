@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { Icon } from "./Icon";
 import { getCurrentUser } from "../lib/store";
 import { logout } from "../api/auth";
+import NotificationBell from "./NotificationBell";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: Icon.dashboard, end: true },
@@ -96,7 +97,8 @@ export default function Layout({ crumb, children }) {
             </button>
             <div className="topbar__crumb">{crumb}</div>
           </div>
-          <div className="topbar__right">
+          <div className="topbar__right" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <NotificationBell />
             <div className="avatar" title={currentUser?.name || "Loading..."}>
               {initials}
             </div>

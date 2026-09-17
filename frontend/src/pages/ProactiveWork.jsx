@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import { Modal, Spinner, Toast } from "../components/UI";
 import { Icon } from "../components/Icon";
 import ProactiveWorkForm from "../forms/ProactiveWorkForm";
+import ProactiveWorkDetail from "../components/ProactiveWorkDetail";
 import TeamSummaryPanel from "../components/TeamSummaryPanel";
 import {
   getCurrentUser,
   listEmployees,
   listProactiveWork,
+  listProactiveWorkEveryone,
   getProactiveWorkEntry,
   saveProactiveWorkEntry,
   setProactiveWorkHighlighted,
 } from "../lib/store";
+import { triggerPermissionPromptIfFirstTime } from "../lib/pushNotifications";
 
 const CATEGORY_LABELS = {
   ATTENDANCE_PUNCTUALITY: "Attendance & Punctuality",
@@ -37,32 +41,93 @@ function formatWhen(entry) {
   return entry.effort_start_date;
 }
 
+const TABS = [
+  { key: "my-team", label: "My team" },
+  { key: "everyone", label: "Everyone" },
+  { key: "mine", label: "Mine" },
+];
+
 export default function ProactiveWork() {
+  const { id } = useParams();
   const [currentUser, setCurrentUser] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [tab, setTab] = useState("my-team");
   const [entries, setEntries] = useState(null);
+  const [everyonePage, setEveryonePage] = useState({ content: [], page: 0, total_pages: 0, total_elements: 0 });
   const [q, setQ] = useState("");
   const [segment, setSegment] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
   const [adding, setAdding] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-  const [viewingId, setViewingId] = useState(null);
+  const [viewingId, setViewingId] = useState(id ? Number(id) : null);
   const [viewingEntry, setViewingEntry] = useState(null);
   const [viewingLoading, setViewingLoading] = useState(false);
   const [showTeamSummary, setShowTeamSummary] = useState(false);
 
+  useEffect(() => {
+    if (id) {
+      setViewingId(Number(id));
+      triggerPermissionPromptIfFirstTime();
+    }
+  }, [id]);
+
   function flash(m) { setToast(m); setTimeout(() => setToast(null), 2400); }
 
-  const load = async (filter = employeeFilter) => {
-    const [user, employeesList] = await Promise.all([getCurrentUser(), listEmployees()]);
-    setCurrentUser(user);
-    setEmployees(employeesList);
-    const list = await listProactiveWork(filter !== "all" ? { subjectEmployeeId: Number(filter) } : {});
+  const loadTeamOrMine = async (activeTab = tab, filter = employeeFilter) => {
+    const subjectFilter = activeTab === "mine"
+      ? currentUser?.id
+      : (filter !== "all" ? Number(filter) : undefined);
+    const list = await listProactiveWork(subjectFilter != null ? { subjectEmployeeId: subjectFilter } : {});
     setEntries(list);
   };
 
+  const loadEveryone = async (page = 0) => {
+    const result = await listProactiveWorkEveryone({
+      page,
+      unseenOnly: segment === "unseen",
+      highlightedOnly: segment === "highlighted",
+    });
+    setEveryonePage(result);
+  };
+
+  const load = async () => {
+    const [user, employeesList] = await Promise.all([getCurrentUser(), listEmployees()]);
+    setCurrentUser(user);
+    setEmployees(employeesList);
+    if (tab === "everyone") {
+      await loadEveryone(0);
+    } else {
+      const subjectFilter = tab === "mine" ? user?.id : (employeeFilter !== "all" ? Number(employeeFilter) : undefined);
+      const list = await listProactiveWork(subjectFilter != null ? { subjectEmployeeId: subjectFilter } : {});
+      setEntries(list);
+    }
+  };
+
   useEffect(() => { load(); }, []); // eslint-disable-line
+
+  async function handleTabChange(nextTab) {
+    setTab(nextTab);
+    setSegment("all");
+    if (nextTab === "everyone") {
+      await loadEveryone(0);
+    } else {
+      await loadTeamOrMine(nextTab, employeeFilter);
+    }
+  }
+
+  async function handleSegmentChange(nextSegment) {
+    setSegment(nextSegment);
+    if (tab === "everyone") {
+      const result = await listProactiveWorkEveryone({
+        page: 0,
+        unseenOnly: nextSegment === "unseen",
+        highlightedOnly: nextSegment === "highlighted",
+      });
+      setEveryonePage(result);
+    }
+  }
 
   useEffect(() => {
     if (viewingId == null) return;
@@ -82,7 +147,7 @@ export default function ProactiveWork() {
 
   async function handleFilterChange(nextFilter) {
     setEmployeeFilter(nextFilter);
-    await load(nextFilter);
+    await loadTeamOrMine(tab, nextFilter);
   }
 
   async function handleSave(payload) {
@@ -90,8 +155,13 @@ export default function ProactiveWork() {
     try {
       await saveProactiveWorkEntry(payload);
       setAdding(false);
+      setEditingEntry(null);
       await load();
-      flash("Proactive work logged");
+      if (viewingId != null) {
+        const refreshed = await getProactiveWorkEntry(viewingId);
+        setViewingEntry(refreshed);
+      }
+      flash(payload.id ? "Proactive work updated" : "Proactive work logged");
     } catch (err) {
       flash(err.message || "Failed to save entry");
     } finally {
@@ -100,13 +170,23 @@ export default function ProactiveWork() {
   }
 
   async function handleToggleHighlight(entry, ev) {
-    ev.stopPropagation();
+    ev?.stopPropagation();
     try {
       await setProactiveWorkHighlighted(entry.id, !entry.is_highlighted);
       await load();
+      if (viewingId === entry.id) {
+        const refreshed = await getProactiveWorkEntry(entry.id);
+        setViewingEntry(refreshed);
+      }
     } catch (err) {
       flash(err.message || "Failed to update highlight");
     }
+  }
+
+  async function handleViewingChanged() {
+    const refreshed = await getProactiveWorkEntry(viewingId);
+    setViewingEntry(refreshed);
+    await load();
   }
 
   async function closeViewing() {
@@ -114,19 +194,22 @@ export default function ProactiveWork() {
     await load();
   }
 
-  if (!currentUser || entries === null) {
+  if (!currentUser || (tab !== "everyone" && entries === null)) {
     return <Layout crumb={<b>Proactive Work</b>}><Spinner /></Layout>;
   }
 
-  const canFilterByEmployee = currentUser.role === "manager" || currentUser.role === "admin";
-  // Highlight toggle is manager/admin only (BRD §8.3) — never shown for an employee viewing
-  // their own list, even though they can see the highlighted state.
+  const canFilterByEmployee = (currentUser.role === "manager" || currentUser.role === "admin") && tab === "my-team";
   const canHighlight = currentUser.role === "manager" || currentUser.role === "admin";
-  const unseenCount = entries.filter((e) => !e.is_seen).length;
+  const canOpenTeamSummary = currentUser.role === "manager" || currentUser.role === "admin";
 
-  const filtered = entries.filter((e) => {
-    if (segment === "unseen" && e.is_seen) return false;
-    if (segment === "highlighted" && !e.is_highlighted) return false;
+  const sourceRows = tab === "everyone" ? everyonePage.content : (entries || []);
+  const unseenCount = sourceRows.filter((e) => !e.is_seen).length;
+
+  const filtered = sourceRows.filter((e) => {
+    if (tab !== "everyone") {
+      if (segment === "unseen" && e.is_seen) return false;
+      if (segment === "highlighted" && !e.is_highlighted) return false;
+    }
     if (!q.trim()) return true;
     const needle = q.toLowerCase();
     return (
@@ -144,7 +227,7 @@ export default function ProactiveWork() {
           <p>Effort worth remembering that no KPI captures.</p>
         </div>
         <div style={{ display: "flex", gap: "0.6rem" }}>
-          {currentUser.role === "manager" && (
+          {canOpenTeamSummary && (
             <button className="btn btn--ghost" onClick={() => setShowTeamSummary((s) => !s)}>
               Team Summary
             </button>
@@ -155,6 +238,14 @@ export default function ProactiveWork() {
         </div>
       </div>
 
+      <div className="segmented" style={{ marginBottom: "0.9rem" }}>
+        {TABS.map((t) => (
+          <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => handleTabChange(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="filter-bar">
         <div className="search">
           <Icon.search />
@@ -162,11 +253,11 @@ export default function ProactiveWork() {
         </div>
 
         <div className="segmented">
-          <button className={segment === "all" ? "active" : ""} onClick={() => setSegment("all")}>All</button>
-          <button className={segment === "unseen" ? "active" : ""} onClick={() => setSegment("unseen")}>
-            Unseen · {unseenCount}
+          <button className={segment === "all" ? "active" : ""} onClick={() => handleSegmentChange("all")}>All</button>
+          <button className={segment === "unseen" ? "active" : ""} onClick={() => handleSegmentChange("unseen")}>
+            Unseen{tab !== "everyone" ? ` · ${unseenCount}` : ""}
           </button>
-          <button className={segment === "highlighted" ? "active" : ""} onClick={() => setSegment("highlighted")}>
+          <button className={segment === "highlighted" ? "active" : ""} onClick={() => handleSegmentChange("highlighted")}>
             ★ Highlighted
           </button>
         </div>
@@ -181,7 +272,9 @@ export default function ProactiveWork() {
           </select>
         )}
 
-        <span className="tag">{filtered.length} entries</span>
+        <span className="tag">
+          {tab === "everyone" ? `${everyonePage.total_elements} entries` : `${filtered.length} entries`}
+        </span>
       </div>
 
       <div className="card">
@@ -204,13 +297,14 @@ export default function ProactiveWork() {
                   <th>When</th>
                   <th>Linked KPI</th>
                   <th>Status</th>
+                  <th>♥</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((e) => (
                   <tr key={e.id} className={!e.is_seen ? "pwe-row--unseen" : ""}
-                    style={{ cursor: "pointer" }} onClick={() => setViewingId(e.id)}>
+                    style={{ cursor: "pointer" }} onClick={() => { setViewingId(e.id); triggerPermissionPromptIfFirstTime(); }}>
                     <td>
                       <div className="cell-strong">{e.title}</div>
                       <div className="cell-sub pwe-desc">{e.description}</div>
@@ -231,6 +325,7 @@ export default function ProactiveWork() {
                         {e.is_seen ? "SEEN" : "NEW"}
                       </span>
                     </td>
+                    <td className="mono cell-sub">{e.endorsement_count || 0}</td>
                     <td>
                       {canHighlight && (
                         <button className="icon-btn pwe-star"
@@ -247,45 +342,44 @@ export default function ProactiveWork() {
             </table>
           </div>
         )}
+        {tab === "everyone" && everyonePage.total_pages > 1 && (
+          <div style={{ display: "flex", justifyContent: "center", gap: "0.8rem", alignItems: "center", padding: "0.9rem" }}>
+            <button className="btn btn--ghost" disabled={everyonePage.page <= 0}
+              onClick={() => loadEveryone(everyonePage.page - 1)}>← Newer</button>
+            <span className="cell-sub">Page {everyonePage.page + 1} of {everyonePage.total_pages}</span>
+            <button className="btn btn--ghost" disabled={everyonePage.page >= everyonePage.total_pages - 1}
+              onClick={() => loadEveryone(everyonePage.page + 1)}>Older →</button>
+          </div>
+        )}
       </div>
 
-      {/* FR-PW-11 — manager role only, their own team; not shown for employee/admin */}
-      {currentUser.role === "manager" && showTeamSummary && (
-        <Modal title="Team summary" subtitle="A counts grid for your team — not a score."
+      {canOpenTeamSummary && showTeamSummary && (
+        <Modal title="Team summary" subtitle="A counts grid — not a score."
           onClose={() => setShowTeamSummary(false)} wide>
           <TeamSummaryPanel currentUser={currentUser} employees={employees} />
         </Modal>
       )}
 
-      {adding && (
-        <Modal title="Log proactive work" subtitle="Something you did that no KPI would show." onClose={() => setAdding(false)}>
-          <ProactiveWorkForm currentUser={currentUser} saving={saving} onSubmit={handleSave} onCancel={() => setAdding(false)} />
+      {(adding || editingEntry) && (
+        <Modal title={editingEntry ? "Edit proactive work" : "Log proactive work"}
+          subtitle="Something you did that no KPI would show."
+          onClose={() => { setAdding(false); setEditingEntry(null); }}>
+          <ProactiveWorkForm currentUser={currentUser} initial={editingEntry} saving={saving}
+            onSubmit={handleSave} onCancel={() => { setAdding(false); setEditingEntry(null); }} />
         </Modal>
       )}
 
       {viewingId != null && (
-        <Modal title="Proactive work entry" subtitle={viewingEntry?.title} onClose={closeViewing}>
+        <Modal title="Proactive Work" onClose={closeViewing}>
           {viewingLoading || !viewingEntry ? <Spinner /> : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-              <div className="preview-panel">
-                <div className="preview-panel__row"><span className="k">Credited to</span><span className="v">{viewingEntry.subject_employee_name}</span></div>
-                <div className="preview-panel__row"><span className="k">Logged by</span><span className="v">{viewingEntry.logged_by_name}</span></div>
-                <div className="preview-panel__row"><span className="k">Category</span><span className="v">{categoryLabel(viewingEntry)}</span></div>
-                <div className="preview-panel__row"><span className="k">When</span><span className="v mono">{formatWhen(viewingEntry)}</span></div>
-                {viewingEntry.kpi_measurement_id && (
-                  <div className="preview-panel__row"><span className="k">Linked KPI</span>
-                    <span className="v">{viewingEntry.kpi_metric_name} · {viewingEntry.kpi_measurement_period_label}</span></div>
-                )}
-              </div>
-              <div>
-                <strong style={{ fontSize: "0.8rem", color: "var(--ink-soft)", display: "block", marginBottom: "0.3rem" }}>Details</strong>
-                <p style={{ fontSize: "0.86rem", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{viewingEntry.description}</p>
-              </div>
-            </div>
+            <ProactiveWorkDetail
+              entry={viewingEntry}
+              currentUser={currentUser}
+              onChanged={handleViewingChanged}
+              onToggleHighlight={(entry) => handleToggleHighlight(entry)}
+              onEdit={() => { setEditingEntry(viewingEntry); setViewingId(null); }}
+            />
           )}
-          <div className="form-actions">
-            <button type="button" className="btn btn--ghost" onClick={closeViewing}>Close</button>
-          </div>
         </Modal>
       )}
 

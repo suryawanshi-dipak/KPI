@@ -1,6 +1,7 @@
 package com.kpi.dto.request;
 
 import com.kpi.entity.enums.ProactiveWorkCategory;
+import com.kpi.entity.enums.ProactiveWorkVisibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -39,6 +40,13 @@ public class ProactiveWorkEntryRequest {
 
     @NotBlank(message = "Add a few details.")
     private String description;
+
+    // v2 — "What did it change?" Optional: requiring an answer invites an invented one.
+    @Size(max = 200, message = "Keep it under 200 characters.")
+    private String valueStatement;
+
+    // v2 — null defaults to ORGANISATION in the service (visible to everyone at Vitec).
+    private ProactiveWorkVisibility visibility;
 
     @NotNull(message = "Pick a date.")
     private LocalDate effortStartDate;

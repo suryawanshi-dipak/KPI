@@ -10,19 +10,21 @@ import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
 import Feedbacks from "./pages/Feedbacks";
 import LoginScreen from "./pages/LoginScreen";
+import NotificationPreferences from "./pages/NotificationPreferences";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
     <BrowserRouter basename="/kpi">
       <Routes>
-       <Route path="/" element={<ProtectedRoute> <Dashboard /></ProtectedRoute> }
-/>
+        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/kpis" element={<ProtectedRoute><Kpis /></ProtectedRoute>} />
         <Route path="/kpis/:id" element={<ProtectedRoute><KpiDetail /></ProtectedRoute>} />
-        <Route path="/kras" element={<ProtectedRoute><Kras /></ProtectedRoute> } />
+        <Route path="/kras" element={<ProtectedRoute><Kras /></ProtectedRoute>} />
         <Route path="/measurements" element={<ProtectedRoute><Measurements /></ProtectedRoute>} />
         <Route path="/proactive-work" element={<ProtectedRoute><ProactiveWork /></ProtectedRoute>} />
+        <Route path="/proactive-work/:id" element={<ProtectedRoute><ProactiveWork /></ProtectedRoute>} />
+        <Route path="/preferences" element={<ProtectedRoute><NotificationPreferences /></ProtectedRoute>} />
         <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
         <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />

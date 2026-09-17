@@ -18,19 +18,44 @@ const BLANK = {
   other_category_text: "",
   subject_employee_id: "",
   description: "",
+  value_statement: "",
   effort_start_date: new Date().toISOString().slice(0, 10),
   effort_end_date: "",
+  visibility: "ORGANISATION",
   kpi_measurement_id: "",
 };
 
-export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId, onSubmit, onCancel, saving }) {
-  const [form, setForm] = useState({
-    ...BLANK,
-    subject_employee_id: currentUser?.id || "",
-    kpi_measurement_id: lockedKpiMeasurementId || "",
+/**
+ * `initial` (an existing entry) puts the form in edit mode: Credit to is never editable — that's
+ * a bigger decision than fixing a typo — and title/category lock once endorsementCount > 0
+ * unless the viewer is an admin (server enforces both regardless of what the UI shows).
+ */
+export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasurementId, onSubmit, onCancel, saving }) {
+  const [form, setForm] = useState(() => {
+    if (initial) {
+      return {
+        title: initial.title,
+        category: initial.category,
+        other_category_text: initial.other_category_text || "",
+        subject_employee_id: initial.subject_employee_id,
+        description: initial.description,
+        value_statement: initial.value_statement || "",
+        effort_start_date: initial.effort_start_date,
+        effort_end_date: initial.effort_end_date,
+        visibility: initial.visibility || "ORGANISATION",
+        kpi_measurement_id: initial.kpi_measurement_id || "",
+      };
+    }
+    return {
+      ...BLANK,
+      subject_employee_id: currentUser?.id || "",
+      kpi_measurement_id: lockedKpiMeasurementId || "",
+    };
   });
   const [errors, setErrors] = useState({});
-  const [multiDay, setMultiDay] = useState(false);
+  const [multiDay, setMultiDay] = useState(
+    !!initial && initial.effort_end_date && initial.effort_end_date !== initial.effort_start_date
+  );
   const [employees, setEmployees] = useState([]);
   const [measurements, setMeasurements] = useState([]);
 
@@ -38,6 +63,9 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
     listEmployees().then(setEmployees);
     listMeasurements().then(setMeasurements);
   }, []);
+
+  const isEdit = !!initial;
+  const isLocked = isEdit && (initial.endorsement_count || 0) > 0 && currentUser?.role !== "admin";
 
   // Credit-to defaults to self for every role, but is only restricted for Manager (self +
   // direct reports only, still enforced server-side). Employee and Admin can credit anyone.
@@ -90,7 +118,9 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
     if (!validate()) return;
     onSubmit({
       ...form,
+      id: initial?.id,
       other_category_text: form.category === "OTHER" ? form.other_category_text.trim() : null,
+      value_statement: form.value_statement.trim() || null,
       effort_end_date: multiDay ? form.effort_end_date : form.effort_start_date,
       kpi_measurement_id: form.kpi_measurement_id || null,
     });
@@ -101,13 +131,14 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
       <div className="form-grid">
         <Field label="What did you do?" required error={errors.title} full>
           <input className={`input ${errors.title ? "invalid" : ""}`} maxLength={200}
-            value={form.title} onChange={set("title")}
+            value={form.title} onChange={set("title")} disabled={isLocked}
             placeholder="e.g. Covered the on-call rotation for a sick teammate" />
         </Field>
 
-        <Field label="Category" required error={errors.category}>
+        <Field label="Category" required error={errors.category}
+          hint={isLocked ? "locked — this entry has an endorsement" : undefined}>
           <select className={`select ${errors.category ? "invalid" : ""}`}
-            value={form.category} onChange={set("category")}>
+            value={form.category} onChange={set("category")} disabled={isLocked}>
             <option value="">Select a category…</option>
             {ENUMS.proactiveWorkCategory.map((c) => (
               <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
@@ -117,7 +148,7 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
 
         <Field label="Credit to" required error={errors.subject_employee_id}>
           <select className={`select ${errors.subject_employee_id ? "invalid" : ""}`}
-            value={form.subject_employee_id} onChange={set("subject_employee_id")}>
+            value={form.subject_employee_id} onChange={set("subject_employee_id")} disabled={isEdit}>
             {creditOptions.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.name}{Number(e.id) === Number(currentUser?.id) ? " (Me)" : ""}
@@ -129,7 +160,7 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
         {form.category === "OTHER" && (
           <Field label="What kind of work was it?" required error={errors.other_category_text} full>
             <input className={`input ${errors.other_category_text ? "invalid" : ""}`}
-              value={form.other_category_text} onChange={set("other_category_text")}
+              value={form.other_category_text} onChange={set("other_category_text")} disabled={isLocked}
               placeholder="Describe the kind of work in a few words" />
           </Field>
         )}
@@ -138,6 +169,13 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
           <textarea className={`textarea ${errors.description ? "invalid" : ""}`}
             value={form.description} onChange={set("description")}
             placeholder="What happened, and why it mattered." />
+        </Field>
+
+        <Field label="What did it change?" hint="optional" full>
+          <input className="input" maxLength={200}
+            value={form.value_statement} onChange={set("value_statement")}
+            placeholder="e.g. Saves the support team around 3 hours a week" />
+          <span className="hint">The outcome, in one line. Leave it empty if there isn't a clean answer.</span>
         </Field>
 
         <Field label="When" required error={errors.effort_start_date}>
@@ -167,6 +205,23 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
               value={form.effort_end_date} onChange={set("effort_end_date")} />
           </Field>
         )}
+
+        <Field label="Who can see this" full>
+          <div className="segmented" style={{ alignSelf: "flex-start" }}>
+            <button type="button" className={form.visibility === "ORGANISATION" ? "active" : ""}
+              onClick={() => setForm((f) => ({ ...f, visibility: "ORGANISATION" }))}>
+              Everyone at Vitec
+            </button>
+            <button type="button" className={form.visibility === "PRIVATE" ? "active" : ""}
+              onClick={() => setForm((f) => ({ ...f, visibility: "PRIVATE" }))}>
+              Just my manager
+            </button>
+          </div>
+          <span className="hint">
+            Anyone can endorse or comment on an entry shared this way. A linked KPI stays visible
+            only to people who already have access to it.
+          </span>
+        </Field>
       </div>
 
       <div className="form-actions" style={{ justifyContent: "space-between" }}>
@@ -174,7 +229,7 @@ export default function ProactiveWorkForm({ currentUser, lockedKpiMeasurementId,
         <div style={{ display: "flex", gap: "0.6rem" }}>
           <button type="button" className="btn btn--ghost" onClick={onCancel}>Cancel</button>
           <button type="submit" className="btn btn--primary" disabled={saving}>
-            {saving ? "Saving…" : "Save entry"}
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Save entry"}
           </button>
         </div>
       </div>

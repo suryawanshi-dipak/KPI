@@ -1674,8 +1674,28 @@ export async function recordVerification(id, payload) {
 }
 
 /* ────────────────────────────────────────────────────────────
-   PROACTIVE WORK LOG API INTEGRATION (Increment 1)
+   PROACTIVE WORK LOG API INTEGRATION (v1 + v2: peer endorsement/comments,
+   edit-from-detail, Admin Team Summary, the value-statement field)
    ──────────────────────────────────────────────────────────── */
+
+function mapProactiveWorkEndorserToFrontend(b) {
+  if (!b) return null;
+  return { id: b.id, name: b.name };
+}
+
+function mapProactiveWorkCommentToFrontend(b) {
+  if (!b) return null;
+  return {
+    id: b.id,
+    entry_id: b.entryId,
+    author_id: b.authorId,
+    author_name: b.authorName,
+    body: b.body,
+    created_at: b.createdAt,
+    edited_at: b.editedAt,
+    is_deleted: b.isDeleted ? 1 : 0,
+  };
+}
 
 function mapProactiveWorkToFrontend(b) {
   if (!b) return null;
@@ -1693,15 +1713,25 @@ function mapProactiveWorkToFrontend(b) {
     logged_by_name: b.loggedByName,
     title: b.title,
     description: b.description,
+    value_statement: b.valueStatement,
     effort_start_date: b.effortStartDate,
     effort_end_date: b.effortEndDate,
+    visibility: b.visibility,
     is_seen: b.isSeen ? 1 : 0,
     seen_at: b.seenAt,
     seen_by_id: b.seenById,
+    seen_by_name: b.seenByName,
     is_highlighted: b.isHighlighted ? 1 : 0,
     highlighted_at: b.highlightedAt,
     created_at: b.createdAt,
     updated_at: b.updatedAt,
+    edited_at: b.editedAt,
+    endorsement_count: b.endorsementCount || 0,
+    comment_count: b.commentCount || 0,
+    endorsed_by_me: b.endorsedByMe ? 1 : 0,
+    // Only present on the single-entry detail fetch — undefined on list rows.
+    endorsers: b.endorsers ? b.endorsers.map(mapProactiveWorkEndorserToFrontend) : undefined,
+    comments: b.comments ? b.comments.map(mapProactiveWorkCommentToFrontend) : undefined,
   };
 }
 
@@ -1742,31 +1772,59 @@ export async function getProactiveWorkEntry(id) {
   return mapProactiveWorkToFrontend(json.data);
 }
 
-/** Create-only — Increment 1 has no edit/delete endpoint. */
-export async function saveProactiveWorkEntry(payload) {
-  const token = await getToken();
-  const headers = authHeaders(token);
-  const body = {
+function proactiveWorkRequestBody(payload) {
+  return {
     subjectEmployeeId: Number(payload.subject_employee_id),
     category: payload.category,
     otherCategoryText: payload.category === "OTHER" ? payload.other_category_text : null,
     title: payload.title,
     description: payload.description,
+    valueStatement: payload.value_statement || null,
     effortStartDate: payload.effort_start_date,
     effortEndDate: payload.effort_end_date || payload.effort_start_date,
+    visibility: payload.visibility || "ORGANISATION",
     kpiMeasurementId: payload.kpi_measurement_id ? Number(payload.kpi_measurement_id) : null,
   };
-  const res = await fetch(`${API_BASE}/proactive-work`, {
-    method: "POST",
+}
+
+export async function saveProactiveWorkEntry(payload) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const isEdit = !!payload.id;
+  const res = await fetch(`${API_BASE}/proactive-work${isEdit ? `/${payload.id}` : ""}`, {
+    method: isEdit ? "PUT" : "POST",
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(proactiveWorkRequestBody(payload)),
   });
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.message || "Failed to log proactive work");
+    throw new Error(errorJson.message || (isEdit ? "Failed to update proactive work entry" : "Failed to log proactive work"));
   }
   const json = await res.json();
   return mapProactiveWorkToFrontend(json.data);
+}
+
+/** The org-wide "Everyone" feed — every role, ORGANISATION-visibility entries only, paged. */
+export async function listProactiveWorkEveryone({ page = 0, size = 25, unseenOnly, highlightedOnly } = {}) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const params = [`page=${page}`, `size=${size}`];
+  if (unseenOnly) params.push("unseenOnly=true");
+  if (highlightedOnly) params.push("highlightedOnly=true");
+  const res = await fetch(`${API_BASE}/proactive-work/everyone?${params.join("&")}`, { headers });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to fetch the Everyone feed");
+  }
+  const json = await res.json();
+  const data = json.data || {};
+  return {
+    content: (data.content || []).map(mapProactiveWorkToFrontend),
+    page: data.page || 0,
+    size: data.size || size,
+    total_elements: data.totalElements || 0,
+    total_pages: data.totalPages || 0,
+  };
 }
 
 /** Manager/admin only server-side — see BRD §8.3 RBAC matrix (Seen/Highlight: Employee = No). */
@@ -1784,6 +1842,72 @@ export async function setProactiveWorkHighlighted(id, highlighted) {
   }
   const json = await res.json();
   return mapProactiveWorkToFrontend(json.data);
+}
+
+/** Anyone who can view the entry, except its subject. Absent entirely (never disabled) on a
+ *  PRIVATE entry in the UI, and rejected server-side either way. */
+export async function setProactiveWorkEndorsed(id, endorsed) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/${id}/endorsement`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ endorsed }),
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to update endorsement");
+  }
+  const json = await res.json();
+  return mapProactiveWorkToFrontend(json.data);
+}
+
+export async function addProactiveWorkComment(entryId, body) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/${entryId}/comments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to add comment");
+  }
+  const json = await res.json();
+  return mapProactiveWorkCommentToFrontend(json.data);
+}
+
+/** Author only, server-enforced. */
+export async function editProactiveWorkComment(commentId, body) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/comments/${commentId}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to edit comment");
+  }
+  const json = await res.json();
+  return mapProactiveWorkCommentToFrontend(json.data);
+}
+
+/** Author or admin, server-enforced. Soft delete — renders as "Comment removed" afterward. */
+export async function deleteProactiveWorkComment(commentId) {
+  const token = await getToken();
+  const headers = authHeaders(token);
+  const res = await fetch(`${API_BASE}/proactive-work/comments/${commentId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.message || "Failed to delete comment");
+  }
+  return true;
 }
 
 
