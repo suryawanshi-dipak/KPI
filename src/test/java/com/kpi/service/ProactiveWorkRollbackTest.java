@@ -89,6 +89,7 @@ class ProactiveWorkRollbackTest {
                 .category(ProactiveWorkCategory.TEAM_SUPPORT)
                 .title("Covered on-call")
                 .description("Handled late shifts")
+                .valueStatement("Kept the queue moving overnight.")
                 .effortStartDate(LocalDate.of(2026, 9, 10))
                 .effortEndDate(LocalDate.of(2026, 9, 5)) // invalid: end before start!
                 .build();

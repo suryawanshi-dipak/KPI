@@ -75,6 +75,7 @@ describe("ProactiveWorkForm — multi-day toggle", () => {
     await userEvent.type(fieldControl(/what did you do/i), "Covered the on-call rotation");
     await userEvent.selectOptions(fieldControl(/^category/i), "TEAM_SUPPORT");
     await userEvent.type(fieldControl(/^details/i), "Filled in for a sick teammate");
+    await userEvent.type(fieldControl(/what did it change/i), "Kept the queue from backing up");
 
     fireEvent.click(screen.getByRole("button", { name: /save entry/i }));
 

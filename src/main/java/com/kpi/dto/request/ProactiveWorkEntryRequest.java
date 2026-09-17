@@ -41,7 +41,9 @@ public class ProactiveWorkEntryRequest {
     @NotBlank(message = "Add a few details.")
     private String description;
 
-    // v2 — "What did it change?" Optional: requiring an answer invites an invented one.
+    // v2 — "What did it change?" Required per explicit product decision: every entry must state
+    // its outcome in one line.
+    @NotBlank(message = "Tell us what changed as a result.")
     @Size(max = 200, message = "Keep it under 200 characters.")
     private String valueStatement;
 
