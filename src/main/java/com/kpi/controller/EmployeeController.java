@@ -34,6 +34,14 @@ public class EmployeeController {
         return ResponseEntity.ok(ApiResponse.success(employees));
     }
 
+    // Lookup by the shared HRMS employee code (e.g. "VT001") rather than KPI's own id.
+    // Same auth level as the other GETs above (any authenticated user) — used by HRMS's
+    // employee-update sync to resolve KPI's internal id before calling PUT /{id}.
+    @GetMapping("/by-code/{employeeId}")
+    public ResponseEntity<ApiResponse<EmployeeResponse>> getByEmployeeId(@PathVariable String employeeId) {
+        return ResponseEntity.ok(ApiResponse.success(employeeService.getByEmployeeId(employeeId)));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<EmployeeResponse>> update(@PathVariable Integer id, @RequestBody EmployeeRequest request) {
