@@ -13,6 +13,11 @@ public interface EmployeeService {
 
     List<EmployeeResponse> getEmployeesByManager(Integer managerId);
 
+    // Lookup by the shared HRMS employee code (e.g. "VT001") rather than KPI's
+    // own internal id — used by the HRMS -> KPI sync to resolve which KPI record
+    // (subject or manager) an update targets.
+    EmployeeResponse getByEmployeeId(String employeeId);
+
     // Update existing employee's details
     EmployeeResponse update(Integer id, EmployeeRequest request);
 }

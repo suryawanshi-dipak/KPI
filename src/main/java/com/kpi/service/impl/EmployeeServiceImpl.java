@@ -39,41 +39,20 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
+    public EmployeeResponse getByEmployeeId(String employeeId) {
+        return employeeRepository.findByEmployeeId(employeeId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee", employeeId));
+    }
+
+    @Override
     public EmployeeResponse update(Integer id, EmployeeRequest request) {
         Employee e = employeeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", id));
 
         e.setEmployeeId(request.getEmployeeId());
         e.setEmail(request.getEmail());
-        
-        // Update names
-        String name = request.getName();
-        e.setName(name);
-        if (name != null && !name.trim().isEmpty()) {
-            String[] parts = name.trim().split("\\s+");
-            if (parts.length > 0) {
-                e.setFirstName(parts[0]);
-                if (parts.length > 1) {
-                    e.setLastName(parts[parts.length - 1]);
-                } else {
-                    e.setLastName("");
-                }
-                if (parts.length > 2) {
-                    StringBuilder middle = new StringBuilder();
-                    for (int i = 1; i < parts.length - 1; i++) {
-                        if (i > 1) middle.append(" ");
-                        middle.append(parts[i]);
-                    }
-                    e.setMiddleName(middle.toString());
-                } else {
-                    e.setMiddleName("");
-                }
-            }
-        } else {
-            e.setFirstName("");
-            e.setLastName("");
-            e.setMiddleName("");
-        }
+        applyNameParts(e, request.getName());
 
         e.setRole(request.getRole());
         e.setDepartment(request.getDepartment());
@@ -92,8 +71,38 @@ public class EmployeeServiceImpl implements EmployeeService {
         e.setGender(request.getGender());
         e.setStatus(request.getStatus());
 
+        // Only set when HRMS is propagating an actual password change — never blank
+        // this out on an ordinary info-only sync where the field is simply absent.
+        if (request.getPasswordHash() != null && !request.getPasswordHash().isBlank()) {
+            e.setPasswordHash(request.getPasswordHash());
+        }
+
         Employee saved = employeeRepository.save(e);
         return toResponse(saved);
+    }
+
+    /** Splits a full display name into first/middle/last, mirroring HRMS's own convention. */
+    private void applyNameParts(Employee e, String name) {
+        e.setName(name);
+        if (name != null && !name.trim().isEmpty()) {
+            String[] parts = name.trim().split("\\s+");
+            e.setFirstName(parts[0]);
+            e.setLastName(parts.length > 1 ? parts[parts.length - 1] : "");
+            if (parts.length > 2) {
+                StringBuilder middle = new StringBuilder();
+                for (int i = 1; i < parts.length - 1; i++) {
+                    if (i > 1) middle.append(" ");
+                    middle.append(parts[i]);
+                }
+                e.setMiddleName(middle.toString());
+            } else {
+                e.setMiddleName("");
+            }
+        } else {
+            e.setFirstName("");
+            e.setLastName("");
+            e.setMiddleName("");
+        }
     }
 
     private EmployeeResponse toResponse(Employee e) {

@@ -23,4 +23,10 @@ public class EmployeeRequest {
     private LocalDate joinedOn;
     private String gender;
     private EmployeeStatus status;
+
+    // Optional. Set only when HRMS is propagating a password change (see
+    // kpiSyncService.syncEmployeeToKpi on the HRMS side) — a bcrypt hash, never
+    // a plaintext password. Left null/blank on every ordinary info-only sync,
+    // in which case EmployeeServiceImpl#update leaves the stored hash untouched.
+    private String passwordHash;
 }
