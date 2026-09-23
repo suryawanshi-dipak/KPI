@@ -98,6 +98,11 @@ export default function Layout({ crumb, children }) {
             <div className="topbar__crumb">{crumb}</div>
           </div>
           <div className="topbar__right" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <a href="/kpi/help.html" target="_blank" rel="noreferrer"
+              className="icon-btn" title="How to use Work Insights & KPI Feedbacks"
+              aria-label="Help guide">
+              <Icon.help />
+            </a>
             <NotificationBell />
             <div className="avatar" title={currentUser?.name || "Loading..."}>
               {initials}

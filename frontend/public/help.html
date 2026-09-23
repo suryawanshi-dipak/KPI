@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>How to use Work Insights &amp; KPI Feedbacks</title>
+<style>
+  :root {
+    --ink: #1a2233;
+    --ink-soft: #4b5468;
+    --muted: #7a8296;
+    --rule: #e4e7ee;
+    --surface: #ffffff;
+    --surface-2: #f5f6fa;
+    --primary: #3a5bd9;
+    --primary-bg: #eaeeff;
+    --ok: #1b8a5a;
+    --ok-bg: #e7f6ee;
+    --warn: #b7791f;
+    --warn-bg: #fdf2df;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--surface-2);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  header.page {
+    margin-bottom: 2rem;
+  }
+  header.page h1 {
+    font-size: 1.6rem;
+    margin: 0 0 0.4rem;
+  }
+  header.page p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  nav.toc {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  nav.toc strong { display: block; margin-bottom: 0.5rem; }
+  nav.toc a {
+    display: inline-block;
+    margin-right: 1rem;
+    color: var(--primary);
+    text-decoration: none;
+  }
+  nav.toc a:hover { text-decoration: underline; }
+  section {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 1.75rem 1.75rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  section h2 {
+    font-size: 1.25rem;
+    margin: 0 0 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  section > p.lede {
+    color: var(--ink-soft);
+    margin-top: 0.25rem;
+    margin-bottom: 1.4rem;
+  }
+  h3 {
+    font-size: 1rem;
+    margin: 1.4rem 0 0.5rem;
+    color: var(--ink);
+  }
+  h3:first-of-type { margin-top: 0; }
+  ol, ul {
+    margin: 0.4rem 0 0.9rem;
+    padding-left: 1.3rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  p { margin: 0.5rem 0; }
+  code, .pill {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+  }
+  .pill {
+    display: inline-block;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.78rem;
+  }
+  .pill--proactive { background: var(--ok-bg); color: var(--ok); }
+  .pill--missout { background: var(--warn-bg); color: var(--warn); }
+  .pill--tag { background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--rule); }
+  .callout {
+    background: var(--primary-bg);
+    border-left: 3px solid var(--primary);
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    margin: 0.6rem 0 1rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+    margin-top: 2rem;
+  }
+  @media (max-width: 480px) {
+    section { padding: 1.25rem 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>How to use Work Insights &amp; KPI Feedbacks</h1>
+    <p>A short guide to the two modules that sit alongside your KPI measurements.</p>
+  </header>
+
+  <nav class="toc">
+    <strong>On this page</strong>
+    <a href="#work-insights">Work Insights</a>
+    <a href="#kpi-feedbacks">KPI Feedbacks</a>
+  </nav>
+
+  <section id="work-insights">
+    <h2>💡 Work Insights</h2>
+    <p class="lede">
+      A place to log effort and misses that no KPI number captures — covering for a teammate,
+      staying late, a missed deadline — and credit whoever was actually involved.
+    </p>
+
+    <h3>Logging an entry</h3>
+    <ol>
+      <li>Click <strong>＋ Log work insight</strong> (top-right of the Work Insights page, or from a
+        KPI's detail view to link it directly to that KPI).</li>
+      <li>Pick a <strong>Type</strong>: <span class="pill pill--proactive">Proactive</span> for effort
+        worth recognizing, or <span class="pill pill--missout">Missout</span> for something that fell
+        short — deadline slipped, a defect, a gap.</li>
+      <li>Under <strong>Credit to</strong>, type <code>@</code> and start typing a name to mention who
+        was involved.</li>
+      <li>Fill in <strong>What did you do?</strong> (a short title), <strong>Category</strong>,
+        <strong>Details</strong>, and <strong>Impact</strong> (the outcome, in one line).</li>
+      <li>Optionally link the entry to a KPI measurement, mark it as spanning several days, and choose
+        who can see it.</li>
+      <li>Click <strong>Save entry</strong>.</li>
+    </ol>
+
+    <div class="callout">
+      <strong>Credit to</strong> works like a mention, not a form field you must fill in.
+      <ul style="margin-bottom:0">
+        <li>Mention nobody → the entry is logged for <em>you</em>.</li>
+        <li>Mention someone else → <em>only they</em> are credited.</li>
+        <li>Mention yourself <em>and</em> someone else → you're <em>both</em> credited, on the same
+          entry ("Bhavesh Bhimra &amp; Dipak Suryawanshi").</li>
+      </ul>
+    </div>
+
+    <h3>Categories</h3>
+    <p>The Category list changes depending on Type:</p>
+    <table>
+      <tr><th>Proactive</th><th>Missout</th></tr>
+      <tr>
+        <td>Attendance &amp; Punctuality, Team Support, Initiative / Idea, Extra Hours,
+          Resource Saving, Process Improvement, Other</td>
+        <td>Technical, Functional, Communication, Process, Timeline, Other</td>
+      </tr>
+    </table>
+
+    <h3>Reading the list</h3>
+    <ul>
+      <li><strong>My team / Everyone / Mine</strong> tabs switch whose entries you're looking at.</li>
+      <li>A blue left edge on a row means it's <strong>unseen</strong> by the credited person's manager.</li>
+      <li>Click any row to open it, endorse it (👍), comment, or — if you're a manager/admin —
+        highlight it with a star.</li>
+      <li><strong>Who can see this</strong> on an entry: <em>Everyone at Vitec</em> is visible
+        org-wide and can be endorsed/commented on; <em>Just my manager</em> keeps it private.</li>
+    </ul>
+
+    <h3>Editing</h3>
+    <p>
+      Only the person who logged an entry (or an admin) can edit it, and who's credited can never be
+      changed afterwards — re-crediting someone is a bigger decision than fixing a typo. Once an
+      entry has its first endorsement, its Type, Category and title lock too (an admin can still
+      override).
+    </p>
+  </section>
+
+  <section id="kpi-feedbacks">
+    <h2>📋 KPI Feedbacks</h2>
+    <p class="lede">
+      Where non-green KPIs get a root cause, an optional linked Jira ticket, and a trail showing
+      whether the fix actually worked.
+    </p>
+
+    <h3>Finding what needs attention</h3>
+    <ul>
+      <li><strong>Employees</strong> see their own KPIs grouped by KRA area (a "Team KPI Dashboard").</li>
+      <li><strong>Managers / Admins / HR</strong> see a "Remediation Board" grouped by employee
+        (your own KPIs listed first).</li>
+      <li>Filter with <strong>All Non-Green</strong>, <strong>⚠️ Re-escalate Only</strong> (a previous
+        fix didn't hold), or <strong>✅ Improved</strong>.</li>
+    </ul>
+
+    <h3>Logging a remediation</h3>
+    <ol>
+      <li>Click any KPI tile to open the <strong>Link Remediation</strong> panel.</li>
+      <li>Enter a <strong>root cause</strong> explanation — this is required.</li>
+      <li>Optionally add a <strong>Linked Jira Issue Key</strong> (format <code>KEY-#####</code>,
+        e.g. <code>CARIT-12345</code>) if a ticket is tracking the fix.</li>
+      <li>Click <strong>Save Remediation</strong>.</li>
+    </ol>
+    <p>
+      If a Jira ticket is linked, use <strong>Sync</strong> to pull its current status, or
+      <strong>View in Jira ↗</strong> to open it directly. Admins can correct or unlink a
+      mistyped Jira key from the same panel.
+    </p>
+
+    <h3>What the badges mean</h3>
+    <table>
+      <tr><th>Badge</th><th>What it means</th></tr>
+      <tr><td>Feedback needed</td><td>No root cause has been logged yet for this KPI.</td></tr>
+      <tr><td>Root cause logged — no fix tracked</td><td>A reason was given, but no Jira ticket is linked.</td></tr>
+      <tr><td>Resolved in Jira — awaiting verification</td><td>The linked ticket is closed; the KPI hasn't been re-measured to confirm it stuck.</td></tr>
+      <tr><td>Improved</td><td>A later measurement confirmed the fix worked.</td></tr>
+      <tr><td>Not improved — re-escalate</td><td>The fix didn't hold; a new feedback loop is needed.</td></tr>
+      <tr><td>Closed unfixed — re-escalate</td><td>The Jira ticket was closed without a real fix; needs re-escalating.</td></tr>
+    </table>
+
+    <p>
+      When a badge says <em>re-escalate</em>, open the KPI again and log a fresh remediation the same
+      way — the previous attempt stays visible for context.
+    </p>
+  </section>
+
+  <footer>
+    KPI Monitoring System — Vitec · FY2026-27
+  </footer>
+
+</div>
+</body>
+</html>
