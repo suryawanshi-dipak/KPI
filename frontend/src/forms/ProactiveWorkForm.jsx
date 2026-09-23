@@ -57,10 +57,12 @@ const BLANK = {
  * unless the viewer is an admin (server enforces both regardless of what the UI shows).
  *
  * Credit to is a Teams-style @mention picker, not a hierarchy pick: any role can mention any
- * employee(s). Mentioning nobody logs the entry for yourself; mentioning someone credits them
- * *alongside* yourself, not instead of yourself — one entry, jointly credited to everyone
- * involved ("Bhavesh Bhimra & Dipak Suryawanshi"), not one entry per person. Editing an existing
- * entry keeps the single subject it already has; only new entries can be jointly credited.
+ * employee(s), including themselves. Credit is exactly who's mentioned — nobody is added
+ * automatically. Mentioning nobody logs the entry for yourself (an entry is never left
+ * uncredited); mention someone else and only they're credited; mention yourself alongside
+ * someone else and you're both credited, jointly, on one entry ("Bhavesh Bhimra & Dipak
+ * Suryawanshi") rather than one entry per person. Editing an existing entry keeps the single
+ * subject it already has; only new entries can be jointly credited.
  */
 export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasurementId, onSubmit, onCancel, saving }) {
   const [form, setForm] = useState(() => {
@@ -113,33 +115,29 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
   }, [employees, currentUser]);
 
   // Typing "@" opens the suggestion list, filtered by whatever follows it; already-mentioned
-  // people drop out of the list so the same person can't be mentioned twice.
+  // people (including yourself, once mentioned) drop out of the list so nobody gets mentioned
+  // twice. Mentioning yourself IS offered here — it's the only way to be credited alongside
+  // someone else (see effectiveSubjectIds below).
   const showMentionSuggestions = mentionText.startsWith("@");
   const mentionSuggestions = useMemo(() => {
     if (!showMentionSuggestions) return [];
     const q = mentionText.slice(1).trim().toLowerCase();
     return creditOptions
-      // Yourself is credited automatically (see effectiveSubjectIds below), so mentioning
-      // yourself would be redundant — leave yourself out of the suggestion list entirely.
-      .filter((e) => Number(e.id) !== Number(currentUser?.id))
       .filter((e) => !form.subject_employee_ids.some((id) => Number(id) === Number(e.id)))
       .filter((e) => !q || e.name.toLowerCase().includes(q))
       .slice(0, 8);
-  }, [creditOptions, mentionText, showMentionSuggestions, form.subject_employee_ids, currentUser]);
+  }, [creditOptions, mentionText, showMentionSuggestions, form.subject_employee_ids]);
 
-  // Mentioning someone credits them alongside yourself, not instead of yourself — an empty
-  // mention list means "just me", and mentioning Bhavesh means "Bhavesh and me", not "Bhavesh
-  // only". Yourself is appended last (mentioned people first) purely for a consistent display
-  // order ("Bhavesh Bhimra & Dipak Suryawanshi"); the backend also enforces this same rule
-  // server-side regardless of what order a client sends. This resolution happens here (and again
-  // at submit time) so the rest of the form, including the KPI-link field below, reacts to the
-  // actual credited person(s) rather than to the raw mention list.
+  // Credit is exactly who's mentioned — nobody is added automatically. The one exception is an
+  // empty mention list, which resolves to "just me" so an entry is never left uncredited; the
+  // moment you mention anyone, your own name only appears if you mentioned yourself too. This
+  // resolution happens here (and again at submit time) so the rest of the form, including the
+  // KPI-link field below, reacts to the actual credited person(s) rather than to the raw mention
+  // list. The backend enforces the same default-to-self-when-empty rule independently.
   const effectiveSubjectIds = useMemo(() => {
+    if (form.subject_employee_ids.length > 0) return form.subject_employee_ids;
     const selfId = currentUser?.id != null ? Number(currentUser.id) : null;
-    if (selfId == null) return form.subject_employee_ids;
-    return form.subject_employee_ids.includes(selfId)
-      ? form.subject_employee_ids
-      : [...form.subject_employee_ids, selfId];
+    return selfId != null ? [selfId] : [];
   }, [form.subject_employee_ids, currentUser]);
 
   // Linking a KPI measurement only makes sense when exactly one person is credited — a
@@ -254,26 +252,9 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
           </div>
         </Field>
 
-        <Field label="What did you do?" required error={errors.title} full>
-          <input className={`input ${errors.title ? "invalid" : ""}`} maxLength={200}
-            value={form.title} onChange={set("title")} disabled={isLocked}
-            placeholder={PLACEHOLDERS[form.work_kind].title} />
-        </Field>
-
-        <Field label="Category" required error={errors.category}
-          hint={isLocked ? "locked — this entry has an endorsement" : undefined}>
-          <select className={`select ${errors.category ? "invalid" : ""}`}
-            value={form.category} onChange={set("category")} disabled={isLocked}>
-            <option value="">Select a category…</option>
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
-            ))}
-          </select>
-        </Field>
-
         <Field label="Credit to" full
           hint={isEdit ? "locked — re-crediting is a bigger change than editing a typo"
-            : "type @ to also credit a teammate — you're always credited too"}>
+            : "type @ to mention who did this — leave blank to log it for yourself"}>
           {isEdit ? (
             <div className="input" style={{ background: "var(--surface-2)", color: "var(--ink-soft)" }}>
               {initial.subject_employee_name || "—"}
@@ -321,6 +302,23 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
               )}
             </div>
           )}
+        </Field>
+
+        <Field label="What did you do?" required error={errors.title} full>
+          <input className={`input ${errors.title ? "invalid" : ""}`} maxLength={200}
+            value={form.title} onChange={set("title")} disabled={isLocked}
+            placeholder={PLACEHOLDERS[form.work_kind].title} />
+        </Field>
+
+        <Field label="Category" required error={errors.category}
+          hint={isLocked ? "locked — this entry has an endorsement" : undefined}>
+          <select className={`select ${errors.category ? "invalid" : ""}`}
+            value={form.category} onChange={set("category")} disabled={isLocked}>
+            <option value="">Select a category…</option>
+            {categoryOptions.map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
+            ))}
+          </select>
         </Field>
 
         {form.category === "OTHER" && (

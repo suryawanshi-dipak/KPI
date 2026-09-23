@@ -137,9 +137,9 @@ class ProactiveWorkServiceImplTest {
     }
 
     @Test
-    void employeeCreatingForAnotherEmployee_credits_bothPeople() {
-        // Mentioning someone credits them alongside the logger, not instead of the logger — the
-        // legacy single-subject column stays the logger; the full credited set is both people.
+    void employeeCreatingForAnotherEmployee_creditsOnlyThatPerson() {
+        // Credit is exactly who's mentioned — the logger isn't pulled in just because they're the
+        // one who logged it. The legacy single-subject column still stays the logger regardless.
         loginAs(employeeSelf);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         ProactiveWorkEntryRequest req = baseRequest(otherEmployee.getId());
@@ -148,12 +148,12 @@ class ProactiveWorkServiceImplTest {
 
         verify(entryRepository).save(argThat(e ->
                 e.getSubjectEmployeeId().equals(employeeSelf.getId()) &&
-                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), employeeSelf.getId())) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId())) &&
                 e.getLoggedById().equals(employeeSelf.getId())));
     }
 
     @Test
-    void managerCreatingForDirectReport_credits_bothPeople() {
+    void managerCreatingForDirectReport_creditsOnlyThatPerson() {
         loginAs(manager);
         when(employeeRepository.findById(reportOfManager.getId())).thenReturn(Optional.of(reportOfManager));
         ProactiveWorkEntryRequest req = baseRequest(reportOfManager.getId());
@@ -162,12 +162,12 @@ class ProactiveWorkServiceImplTest {
 
         verify(entryRepository).save(argThat(e ->
                 e.getSubjectEmployeeId().equals(manager.getId()) &&
-                e.getSubjectEmployeeIds().equals(List.of(reportOfManager.getId(), manager.getId())) &&
+                e.getSubjectEmployeeIds().equals(List.of(reportOfManager.getId())) &&
                 e.getLoggedById().equals(manager.getId())));
     }
 
     @Test
-    void managerCreatingForSomeoneNotTheirReport_credits_bothPeople() {
+    void managerCreatingForSomeoneNotTheirReport_creditsOnlyThatPerson() {
         // Credit to is a mention, not a hierarchy pick — a Manager with no direct reports must
         // still be able to credit a teammate outside their own reporting line.
         loginAs(manager);
@@ -178,12 +178,12 @@ class ProactiveWorkServiceImplTest {
 
         verify(entryRepository).save(argThat(e ->
                 e.getSubjectEmployeeId().equals(manager.getId()) &&
-                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), manager.getId())) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId())) &&
                 e.getLoggedById().equals(manager.getId())));
     }
 
     @Test
-    void adminCreatingForAnyone_credits_bothPeople() {
+    void adminCreatingForAnyone_creditsOnlyThatPerson() {
         loginAs(admin);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         ProactiveWorkEntryRequest req = baseRequest(otherEmployee.getId());
@@ -192,12 +192,37 @@ class ProactiveWorkServiceImplTest {
 
         verify(entryRepository).save(argThat(e ->
                 e.getSubjectEmployeeId().equals(admin.getId()) &&
-                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), admin.getId())) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId())) &&
                 e.getLoggedById().equals(admin.getId())));
     }
 
     @Test
-    void mentioningSeveralPeople_creditsAllOfThemPlusYourself_inOneEntry() {
+    void mentioningNobody_creditsOnlyTheLogger() {
+        // The one case where the actor IS added automatically — an entry can't be left uncredited.
+        loginAs(employeeSelf);
+        ProactiveWorkEntryRequest req = baseRequest(null);
+
+        service.create(req);
+
+        verify(entryRepository).save(argThat(e ->
+                e.getSubjectEmployeeIds().equals(List.of(employeeSelf.getId()))));
+    }
+
+    @Test
+    void mentioningYourselfAlongsideSomeoneElse_creditsBothJointly() {
+        loginAs(employeeSelf);
+        when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
+        ProactiveWorkEntryRequest req = baseRequest(null);
+        req.setSubjectEmployeeIds(List.of(otherEmployee.getId(), employeeSelf.getId()));
+
+        service.create(req);
+
+        verify(entryRepository).save(argThat(e ->
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), employeeSelf.getId()))));
+    }
+
+    @Test
+    void mentioningSeveralPeople_creditsExactlyThoseMentioned_notYourselfToo() {
         loginAs(employeeSelf);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         when(employeeRepository.findById(reportOfManager.getId())).thenReturn(Optional.of(reportOfManager));
@@ -207,7 +232,7 @@ class ProactiveWorkServiceImplTest {
         service.create(req);
 
         verify(entryRepository, times(1)).save(argThat(e ->
-                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), reportOfManager.getId(), employeeSelf.getId()))));
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), reportOfManager.getId()))));
     }
 
     @Test

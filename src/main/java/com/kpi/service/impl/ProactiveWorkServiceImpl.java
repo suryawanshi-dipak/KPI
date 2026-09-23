@@ -82,9 +82,9 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         // credit any employee(s), including a Manager crediting someone outside their own
         // reporting line. (Previously Manager was restricted to self + direct reports; that
         // restriction made "credit a teammate" impossible for a manager with no reports of
-        // their own.) Mentioning someone credits them alongside the logger, not instead of the
-        // logger — resolveCreateSubjectIds appends the actor if the request didn't already
-        // include them, so that rule holds even against a client that forgot to.
+        // their own.) Credit is exactly who's mentioned — resolveCreateSubjectIds only falls
+        // back to the actor when the request names nobody at all, so an entry is never left
+        // uncredited; it does NOT add the actor alongside an explicit mention.
         if (actor.getRole() != Role.employee && actor.getRole() != Role.manager && actor.getRole() != Role.admin) {
             throw new AccessDeniedException("Role not authorized to log proactive work");
         }
@@ -513,11 +513,12 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
 
     /** Resolves who a new entry credits: the plural subjectEmployeeIds when the caller sent one
      *  (a new mention-based create), falling back to the legacy singular subjectEmployeeId for
-     *  any caller that still only sends that. Either way, the actor is appended if not already
-     *  present — mentioning someone credits them alongside the logger, never instead of the
-     *  logger, and this holds even against a client that forgot to include itself. Order is
-     *  preserved (mentioned people first, actor last, matching ProactiveWorkForm.jsx) and
-     *  duplicates are dropped. */
+     *  any caller that still only sends that. Credit is exactly who's named — the actor is added
+     *  ONLY when the request names nobody at all, so an entry is never left uncredited; naming
+     *  someone else does not also pull the actor in, and naming the actor alongside someone else
+     *  (an explicit self-mention) is what makes the actor show up jointly. Duplicates are
+     *  dropped; order is otherwise preserved as sent (mentioned people first, actor last if
+     *  self-mentioned, matching ProactiveWorkForm.jsx). */
     private List<Integer> resolveCreateSubjectIds(ProactiveWorkEntryRequest request, Integer actorId) {
         LinkedHashSet<Integer> ids = new LinkedHashSet<>();
         if (request.getSubjectEmployeeIds() != null) {
@@ -525,10 +526,12 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         } else if (request.getSubjectEmployeeId() != null) {
             ids.add(request.getSubjectEmployeeId());
         }
-        if (ids.isEmpty() && actorId == null) {
-            throw new ProactiveWorkValidationException("subjectEmployeeIds", "Choose who to credit this to.");
+        if (ids.isEmpty()) {
+            if (actorId == null) {
+                throw new ProactiveWorkValidationException("subjectEmployeeIds", "Choose who to credit this to.");
+            }
+            ids.add(actorId);
         }
-        ids.add(actorId);
         return List.copyOf(ids);
     }
 

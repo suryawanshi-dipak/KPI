@@ -136,7 +136,7 @@ describe("ProactiveWorkForm — Credit to @mention", () => {
     expect(onSubmit.mock.calls[0][0].subject_employee_ids).toEqual([5]);
   });
 
-  it("fans out to the @mentioned person alongside yourself, not instead of yourself", async () => {
+  it("credits only the @mentioned person, not yourself as well", async () => {
     store.listEmployees.mockResolvedValue([
       { id: 5, name: "Employee Five", managerId: 2 },
       { id: 7, name: "Shreyash Bari", managerId: 2 },
@@ -158,13 +158,35 @@ describe("ProactiveWorkForm — Credit to @mention", () => {
     fireEvent.click(screen.getByRole("button", { name: /save entry/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    // Mentioned person (7) first, yourself (5) last — mentioning someone adds them, it doesn't
-    // replace you, and the mentioned person is named first in the joined display ("Shreyash
-    // Bari & Employee Five").
+    // Mentioning someone else does NOT also pull yourself in — credit is exactly who's mentioned.
+    expect(onSubmit.mock.calls[0][0].subject_employee_ids).toEqual([7]);
+  });
+
+  it("credits both when you mention yourself alongside someone else", async () => {
+    store.listEmployees.mockResolvedValue([
+      { id: 5, name: "Employee Five", managerId: 2 },
+      { id: 7, name: "Shreyash Bari", managerId: 2 },
+    ]);
+    const onSubmit = vi.fn();
+    render(<ProactiveWorkForm currentUser={CURRENT_USER} onSubmit={onSubmit} onCancel={() => {}} />);
+
+    await userEvent.type(fieldControl(/what did you do/i), "Covered the on-call rotation");
+    await userEvent.selectOptions(fieldControl(/^category/i), "TEAM_SUPPORT");
+    await userEvent.type(fieldControl(/^details/i), "Filled in for a sick teammate");
+    await userEvent.type(fieldControl(/^impact/i), "Kept the queue from backing up");
+
+    await userEvent.type(fieldControl(/^credit to/i), "@Shreyash");
+    await userEvent.click(await screen.findByRole("button", { name: /shreyash bari/i }));
+    await userEvent.type(fieldControl(/^credit to/i), "@Employee Five");
+    await userEvent.click(await screen.findByRole("button", { name: /employee five \(me\)/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /save entry/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0].subject_employee_ids).toEqual([7, 5]);
   });
 
-  it("never offers yourself in the mention suggestions, since you're credited automatically", async () => {
+  it("offers yourself in the mention suggestions, so you can be credited alongside someone else", async () => {
     store.listEmployees.mockResolvedValue([
       { id: 5, name: "Employee Five", managerId: 2 },
       { id: 7, name: "Shreyash Bari", managerId: 2 },
@@ -174,7 +196,7 @@ describe("ProactiveWorkForm — Credit to @mention", () => {
     await userEvent.type(fieldControl(/^credit to/i), "@e");
 
     expect(await screen.findByRole("button", { name: /shreyash bari/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /employee five/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /employee five \(me\)/i })).toBeInTheDocument();
   });
 });
 
