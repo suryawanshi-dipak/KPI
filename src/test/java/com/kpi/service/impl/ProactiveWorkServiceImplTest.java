@@ -109,7 +109,7 @@ class ProactiveWorkServiceImplTest {
 
     private ProactiveWorkEntry entry(Long id, Integer subjectId, Integer loggedById, ProactiveWorkVisibility visibility) {
         return ProactiveWorkEntry.builder()
-                .id(id).subjectEmployeeId(subjectId).loggedById(loggedById)
+                .id(id).subjectEmployeeId(subjectId).subjectEmployeeIds(List.of(subjectId)).loggedById(loggedById)
                 .category(ProactiveWorkCategory.EXTRA_HOURS).title("t").description("d")
                 .effortStartDate(LocalDate.of(2026, 9, 1)).effortEndDate(LocalDate.of(2026, 9, 1))
                 .visibility(visibility)
@@ -137,7 +137,9 @@ class ProactiveWorkServiceImplTest {
     }
 
     @Test
-    void employeeCreatingForAnotherEmployee_succeeds() {
+    void employeeCreatingForAnotherEmployee_credits_bothPeople() {
+        // Mentioning someone credits them alongside the logger, not instead of the logger — the
+        // legacy single-subject column stays the logger; the full credited set is both people.
         loginAs(employeeSelf);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         ProactiveWorkEntryRequest req = baseRequest(otherEmployee.getId());
@@ -145,12 +147,13 @@ class ProactiveWorkServiceImplTest {
         service.create(req);
 
         verify(entryRepository).save(argThat(e ->
-                e.getSubjectEmployeeId().equals(otherEmployee.getId()) &&
+                e.getSubjectEmployeeId().equals(employeeSelf.getId()) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), employeeSelf.getId())) &&
                 e.getLoggedById().equals(employeeSelf.getId())));
     }
 
     @Test
-    void managerCreatingForDirectReport_succeeds() {
+    void managerCreatingForDirectReport_credits_bothPeople() {
         loginAs(manager);
         when(employeeRepository.findById(reportOfManager.getId())).thenReturn(Optional.of(reportOfManager));
         ProactiveWorkEntryRequest req = baseRequest(reportOfManager.getId());
@@ -158,23 +161,29 @@ class ProactiveWorkServiceImplTest {
         service.create(req);
 
         verify(entryRepository).save(argThat(e ->
-                e.getSubjectEmployeeId().equals(reportOfManager.getId()) &&
+                e.getSubjectEmployeeId().equals(manager.getId()) &&
+                e.getSubjectEmployeeIds().equals(List.of(reportOfManager.getId(), manager.getId())) &&
                 e.getLoggedById().equals(manager.getId())));
     }
 
     @Test
-    void managerCreatingForSomeoneNotTheirReport_isForbidden() {
+    void managerCreatingForSomeoneNotTheirReport_credits_bothPeople() {
+        // Credit to is a mention, not a hierarchy pick — a Manager with no direct reports must
+        // still be able to credit a teammate outside their own reporting line.
         loginAs(manager);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         ProactiveWorkEntryRequest req = baseRequest(otherEmployee.getId());
 
-        assertThatThrownBy(() -> service.create(req)).isInstanceOf(AccessDeniedException.class);
-        verify(entryRepository, never()).save(any());
-        verifyNoInteractions(auditService);
+        service.create(req);
+
+        verify(entryRepository).save(argThat(e ->
+                e.getSubjectEmployeeId().equals(manager.getId()) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), manager.getId())) &&
+                e.getLoggedById().equals(manager.getId())));
     }
 
     @Test
-    void adminCreatingForAnyone_succeeds() {
+    void adminCreatingForAnyone_credits_bothPeople() {
         loginAs(admin);
         when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
         ProactiveWorkEntryRequest req = baseRequest(otherEmployee.getId());
@@ -182,8 +191,23 @@ class ProactiveWorkServiceImplTest {
         service.create(req);
 
         verify(entryRepository).save(argThat(e ->
-                e.getSubjectEmployeeId().equals(otherEmployee.getId()) &&
+                e.getSubjectEmployeeId().equals(admin.getId()) &&
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), admin.getId())) &&
                 e.getLoggedById().equals(admin.getId())));
+    }
+
+    @Test
+    void mentioningSeveralPeople_creditsAllOfThemPlusYourself_inOneEntry() {
+        loginAs(employeeSelf);
+        when(employeeRepository.findById(otherEmployee.getId())).thenReturn(Optional.of(otherEmployee));
+        when(employeeRepository.findById(reportOfManager.getId())).thenReturn(Optional.of(reportOfManager));
+        ProactiveWorkEntryRequest req = baseRequest(null);
+        req.setSubjectEmployeeIds(List.of(otherEmployee.getId(), reportOfManager.getId()));
+
+        service.create(req);
+
+        verify(entryRepository, times(1)).save(argThat(e ->
+                e.getSubjectEmployeeIds().equals(List.of(otherEmployee.getId(), reportOfManager.getId(), employeeSelf.getId()))));
     }
 
     @Test

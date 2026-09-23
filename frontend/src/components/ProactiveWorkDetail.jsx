@@ -14,6 +14,11 @@ const CATEGORY_LABELS = {
   EXTRA_HOURS: "Extra Hours",
   RESOURCE_SAVING: "Resource Saving",
   PROCESS_IMPROVEMENT: "Process Improvement",
+  TECHNICAL_MISSOUT: "Technical Missouts",
+  FUNCTIONAL_MISSOUT: "Functional Missouts",
+  COMMUNICATION_MISSOUT: "Communication Missouts",
+  PROCESS_MISSOUT: "Process Missouts",
+  TIMELINE_MISSOUT: "Timeline Missouts",
   OTHER: "Other",
 };
 
@@ -24,6 +29,11 @@ const CATEGORY_ICONS = {
   EXTRA_HOURS: "⏱",
   RESOURCE_SAVING: "♻️",
   PROCESS_IMPROVEMENT: "🔧",
+  TECHNICAL_MISSOUT: "⚙️",
+  FUNCTIONAL_MISSOUT: "🧩",
+  COMMUNICATION_MISSOUT: "💬",
+  PROCESS_MISSOUT: "📋",
+  TIMELINE_MISSOUT: "⏳",
   OTHER: "📌",
 };
 
@@ -34,6 +44,11 @@ const CATEGORY_CHIP_STYLE = {
   EXTRA_HOURS: { background: "#fff4e8", color: "#c2570c" },
   RESOURCE_SAVING: { background: "#e6f7f6", color: "#0f766e" },
   PROCESS_IMPROVEMENT: { background: "#eef2ff", color: "#4338ca" },
+  TECHNICAL_MISSOUT: { background: "#fff1e6", color: "#c2410c" },
+  FUNCTIONAL_MISSOUT: { background: "#fef2f2", color: "#b91c1c" },
+  COMMUNICATION_MISSOUT: { background: "#fdf4e3", color: "#a16207" },
+  PROCESS_MISSOUT: { background: "#fff7ed", color: "#9a3412" },
+  TIMELINE_MISSOUT: { background: "#fef3c7", color: "#92400e" },
   OTHER: { background: "var(--surface-2)", color: "var(--muted)" },
 };
 
@@ -92,7 +107,10 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
   const [error, setError] = useState(null);
   const commentInputRef = useRef(null);
 
-  const isSubject = Number(entry.subject_employee_id) === Number(currentUser?.id);
+  // An entry can now jointly credit several people — "the subject" means any of them, not just
+  // the legacy single subject_employee_id.
+  const subjectIds = entry.subject_employee_ids?.length ? entry.subject_employee_ids : [entry.subject_employee_id];
+  const isSubject = subjectIds.some((id) => Number(id) === Number(currentUser?.id));
   const isAuthor = Number(entry.logged_by_id) === Number(currentUser?.id);
   const isAdmin = currentUser?.role === "admin";
   const canHighlight = currentUser?.role === "manager" || currentUser?.role === "admin";
@@ -175,11 +193,14 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
 
   const chipStyle = CATEGORY_CHIP_STYLE[entry.category] || CATEGORY_CHIP_STYLE.OTHER;
   const hasInfoBox = !!entry.kpi_measurement_id || !!entry.value_statement;
+  // Whoever's named first in subject_employee_name — see the isSubject comment above for why
+  // this isn't just the legacy subject_employee_id.
+  const primarySubjectId = subjectIds[0];
 
   return (
     <div>
       <div className="pwd-header">
-        <PersonAvatar id={entry.subject_employee_id} name={entry.subject_employee_name} />
+        <PersonAvatar id={primarySubjectId} name={entry.subject_employee_name} />
         <div className="pwd-header__body">
           <div className="pwd-header__name">{entry.subject_employee_name}</div>
           <div className="pwd-header__meta">
@@ -195,6 +216,11 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
       <p className="pwd-desc">{entry.description}</p>
 
       <div className="pwd-chips">
+        <span className="pwd-chip" style={entry.work_kind === "MISSOUT"
+          ? { background: "var(--warn-bg)", color: "var(--warn)" }
+          : { background: "var(--ok-bg)", color: "var(--ok)" }}>
+          {entry.work_kind === "MISSOUT" ? "Missout" : "Proactive"}
+        </span>
         <span className="pwd-chip" style={chipStyle}>
           {CATEGORY_ICONS[entry.category] || "📌"} {categoryLabel(entry)}
         </span>

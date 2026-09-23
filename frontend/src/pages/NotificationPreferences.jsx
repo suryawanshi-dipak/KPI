@@ -78,7 +78,7 @@ export default function NotificationPreferences() {
         <div className="pref-header">
           <h1 className="pref-title">Notification Preferences</h1>
           <p className="pref-subtitle">
-            Control how and when you receive proactive work updates and desktop alerts.
+            Control how and when you receive work insight updates and desktop alerts.
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export default function NotificationPreferences() {
                 ? "Because you previously blocked notifications, the site cannot re-prompt you. To enable popups, click the lock/settings icon in your browser address bar and change Notifications to 'Allow'."
                 : browserPermission === "unsupported"
                 ? "This browser doesn't support desktop push notifications."
-                : "Enable it below, or you'll be prompted automatically the first time you endorse or open a proactive work entry."}
+                : "Enable it below, or you'll be prompted automatically the first time you endorse or open a work insight."}
             </p>
           </div>
           {browserPermission === "granted" && (
@@ -146,10 +146,10 @@ export default function NotificationPreferences() {
           <div className="pref-loading">Loading preferences...</div>
         ) : (
           <form className="pref-form" onSubmit={handleSave}>
-            {/* Row 1: New proactive work scope */}
+            {/* Row 1: New work insight scope */}
             <div className="pref-row">
               <div className="pref-row__label">
-                <strong>New proactive work</strong>
+                <strong>New work insight</strong>
                 <p>Which discretionary work entries should trigger desktop popups and bell alerts.</p>
               </div>
               <div className="pref-row__control">
@@ -234,7 +234,7 @@ export default function NotificationPreferences() {
             <div className="pref-row">
               <div className="pref-row__label">
                 <strong>When my manager highlights my entry</strong>
-                <p>Notify me when leadership flags my proactive work as standout effort.</p>
+                <p>Notify me when leadership flags my work insight as standout effort.</p>
               </div>
               <div className="pref-row__control">
                 <label className="toggle-switch">

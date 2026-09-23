@@ -18,6 +18,11 @@ const CATEGORY_LABELS = {
   EXTRA_HOURS: "Extra Hours",
   RESOURCE_SAVING: "Resource Saving",
   PROCESS_IMPROVEMENT: "Process Improvement",
+  TECHNICAL_MISSOUT: "Technical Missouts",
+  FUNCTIONAL_MISSOUT: "Functional Missouts",
+  COMMUNICATION_MISSOUT: "Communication Missouts",
+  PROCESS_MISSOUT: "Process Missouts",
+  TIMELINE_MISSOUT: "Timeline Missouts",
   OTHER: "Other",
 };
 
@@ -88,7 +93,7 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
       const result = await listProactiveWorkEveryone({ page: p, size: PAGE_SIZE });
       setPage(result);
     } catch (err) {
-      console.warn("Failed to load proactive work feed:", err);
+      console.warn("Failed to load work insights feed:", err);
     } finally {
       setLoading(false);
     }
@@ -133,7 +138,7 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
       setEditingEntry(null);
       await load(page.page);
       if (viewingId != null) setViewingEntry(await getProactiveWorkEntry(viewingId));
-      flash(payload.id ? "Proactive work updated" : "Proactive work logged");
+      flash(payload.id ? "Work insight updated" : "Work insight logged");
     } catch (err) {
       flash(err.message || "Failed to save entry");
     } finally {
@@ -167,7 +172,7 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
     <div className="card pwf-card">
       <div className="pwf-head">
         <div>
-          <h3 style={{ margin: 0 }}>Proactive Work Feed</h3>
+          <h3 style={{ margin: 0 }}>Work Insights</h3>
           <p className="cell-sub" style={{ margin: "0.15rem 0 0" }}>Recent contributions from across the organization</p>
         </div>
         <Link to="/proactive-work" className="pwf-view-all">View all</Link>
@@ -177,7 +182,7 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
         <span className="avatar" style={{ width: 30, height: 30, fontSize: 11, background: avatarColor(currentUser?.id) }}>
           {initialsOf(currentUser?.name)}
         </span>
-        <span className="pwf-composer__text">Share a proactive work…</span>
+        <span className="pwf-composer__text">Share a work insight…</span>
         <span className="pwf-composer__plus">+</span>
       </button>
 
@@ -189,15 +194,21 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
             <p>Nothing logged yet.</p>
           </div>
         ) : (
-          page.content.map((e) => (
+          page.content.map((e) => {
+            // For a jointly-credited entry, the avatar/designation represent whoever's named
+            // first in subject_employee_name ("Bhavesh Bhimra & Dipak Suryawanshi") — the first
+            // id in subject_employee_ids — rather than the legacy single subject_employee_id,
+            // which is always the logger and may not even be the person named first.
+            const primarySubjectId = e.subject_employee_ids?.length ? e.subject_employee_ids[0] : e.subject_employee_id;
+            return (
             <div key={e.id} className="pwf-item" onClick={() => openEntry(e.id)}>
-              <span className="avatar" style={{ width: 32, height: 32, fontSize: 12, background: avatarColor(e.subject_employee_id), flexShrink: 0 }}>
+              <span className="avatar" style={{ width: 32, height: 32, fontSize: 12, background: avatarColor(primarySubjectId), flexShrink: 0 }}>
                 {initialsOf(e.subject_employee_name)}
               </span>
               <div className="pwf-item__body">
                 <div className="pwf-item__meta">
                   <span className="pwf-item__name">{e.subject_employee_name}</span>
-                  {designationFor(e.subject_employee_id) && <span> · {designationFor(e.subject_employee_id)}</span>}
+                  {designationFor(primarySubjectId) && <span> · {designationFor(primarySubjectId)}</span>}
                   <span> · {formatRelativeTime(e.created_at)}</span>
                 </div>
                 <div className="pwf-item__title">{e.title}</div>
@@ -214,7 +225,8 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -225,8 +237,8 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
       )}
 
       {(adding || editingEntry) && (
-        <Modal title={editingEntry ? "Edit proactive work" : "Log proactive work"}
-          subtitle="Something you did that no KPI would show."
+        <Modal title={editingEntry ? "Edit work insight" : "Log work insight"}
+          subtitle="Something worth recognizing — or a miss worth naming — that no KPI would show."
           onClose={() => { setAdding(false); setEditingEntry(null); }}>
           <ProactiveWorkForm currentUser={currentUser} initial={editingEntry} saving={saving}
             onSubmit={handleSave} onCancel={() => { setAdding(false); setEditingEntry(null); }} />
@@ -234,7 +246,7 @@ export default function ProactiveWorkFeed({ currentUser, employees }) {
       )}
 
       {viewingId != null && (
-        <Modal title="Proactive Work" onClose={() => setViewingId(null)}>
+        <Modal title="Work Insight" onClose={() => setViewingId(null)}>
           {viewingLoading || !viewingEntry ? <Spinner /> : (
             <ProactiveWorkDetail
               entry={viewingEntry}

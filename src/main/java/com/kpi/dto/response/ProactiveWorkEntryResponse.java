@@ -2,6 +2,7 @@ package com.kpi.dto.response;
 
 import com.kpi.entity.enums.ProactiveWorkCategory;
 import com.kpi.entity.enums.ProactiveWorkEntryType;
+import com.kpi.entity.enums.ProactiveWorkKind;
 import com.kpi.entity.enums.ProactiveWorkVisibility;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,10 +28,16 @@ public class ProactiveWorkEntryResponse {
     private String kpiMeasurementPeriodLabel;
 
     private ProactiveWorkEntryType entryType;
+    private ProactiveWorkKind workKind;
     private ProactiveWorkCategory category;
     private String otherCategoryText;
 
+    // subjectEmployeeId stays as the legacy single "primary" subject (the logger, for entries
+    // created after v4 — see ProactiveWorkServiceImpl#create). subjectEmployeeIds is the full
+    // credited set, and subjectEmployeeName is now the " & "-joined display name for all of
+    // them, so every existing screen that renders subjectEmployeeName keeps working unchanged.
     private Integer subjectEmployeeId;
+    private List<Integer> subjectEmployeeIds;
     private String subjectEmployeeName;
     private Integer loggedById;
     private String loggedByName;

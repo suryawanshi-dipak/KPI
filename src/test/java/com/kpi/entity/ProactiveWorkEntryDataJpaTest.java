@@ -19,6 +19,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -94,6 +95,31 @@ class ProactiveWorkEntryDataJpaTest {
         assertThat(reloadedLinked.getEntryType()).isEqualTo(ProactiveWorkEntryType.KPI_LINKED);
         assertThat(reloadedLinked.getValueStatement()).isEqualTo("Cuts release verification from a day to an hour.");
         assertThat(reloadedLinked.getVisibility()).isEqualTo(ProactiveWorkVisibility.PRIVATE);
+    }
+
+    @Test
+    void jointCreditSavesAndReloadsInInsertionOrder() {
+        ProactiveWorkEntry entry = ProactiveWorkEntry.builder()
+                .category(ProactiveWorkCategory.TEAM_SUPPORT)
+                .subjectEmployeeId(1).subjectEmployeeIds(List.of(2, 1)).loggedById(1)
+                .title("Covered the release together")
+                .description("Paired on the hotfix end to end.")
+                .effortStartDate(LocalDate.of(2026, 9, 10))
+                .effortEndDate(LocalDate.of(2026, 9, 10))
+                .visibility(ProactiveWorkVisibility.ORGANISATION)
+                .isSeen(false).isHighlighted(false).isDeleted(false)
+                .endorsementCount(0).commentCount(0)
+                .build();
+        Long id = entryRepository.save(entry).getId();
+
+        List<Integer> rawOrder = jdbc.queryForList(
+                "SELECT employee_id FROM proactive_work_entry_subject WHERE entry_id = ? ORDER BY sort_order",
+                Integer.class, id);
+        assertThat(rawOrder).containsExactly(2, 1);
+
+        ProactiveWorkEntry reloaded = entryRepository.findById(id).orElseThrow();
+        assertThat(reloaded.getSubjectEmployeeIds()).containsExactly(2, 1);
+        assertThat(reloaded.getSubjectEmployeeId()).isEqualTo(1);
     }
 
     @Test

@@ -1,5 +1,8 @@
 -- Minimal FK fixtures (not full column fidelity — see the test class comment for why) plus the
--- proactive_work_* v1+v2 DDL verbatim from V7__proactive_work_v2.sql.
+-- proactive_work_* v1+v2 DDL verbatim from V7__proactive_work_v2.sql, the v3 work_kind column
+-- from V10__proactive_work_kind.sql, the v4 Missout categories from
+-- V11__proactive_work_missout_categories.sql, and the v5 joint-credit join table from
+-- V12__proactive_work_multi_subject.sql.
 
 CREATE TABLE employees (
   id int unsigned NOT NULL AUTO_INCREMENT,
@@ -36,7 +39,8 @@ CREATE TABLE `proactive_work_entry` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `kpi_measurement_id` bigint unsigned DEFAULT NULL,
   `entry_type` enum('KPI_LINKED','STANDALONE') GENERATED ALWAYS AS (if((`kpi_measurement_id` is null),_utf8mb4'STANDALONE',_utf8mb4'KPI_LINKED')) STORED NOT NULL,
-  `category` enum('ATTENDANCE_PUNCTUALITY','TEAM_SUPPORT','INITIATIVE_IDEA','EXTRA_HOURS','RESOURCE_SAVING','PROCESS_IMPROVEMENT','OTHER') NOT NULL,
+  `category` enum('ATTENDANCE_PUNCTUALITY','TEAM_SUPPORT','INITIATIVE_IDEA','EXTRA_HOURS','RESOURCE_SAVING','PROCESS_IMPROVEMENT','TECHNICAL_MISSOUT','FUNCTIONAL_MISSOUT','COMMUNICATION_MISSOUT','PROCESS_MISSOUT','TIMELINE_MISSOUT','OTHER') NOT NULL,
+  `work_kind` enum('PROACTIVE','MISSOUT') NOT NULL DEFAULT 'PROACTIVE',
   `other_category_text` varchar(300) DEFAULT NULL,
   `subject_employee_id` int unsigned NOT NULL,
   `logged_by_id` int unsigned NOT NULL,
@@ -71,6 +75,16 @@ CREATE TABLE `proactive_work_entry` (
   CONSTRAINT `fk_pwe_subject` FOREIGN KEY (`subject_employee_id`) REFERENCES `employees` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `chk_other_text` CHECK ((((`category` = _utf8mb4'OTHER') and (`other_category_text` is not null) and (trim(`other_category_text`) <> _utf8mb4'')) or ((`category` <> _utf8mb4'OTHER') and (`other_category_text` is null)))),
   CONSTRAINT `chk_period_order` CHECK ((`effort_end_date` >= `effort_start_date`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE proactive_work_entry_subject (
+  entry_id    BIGINT UNSIGNED NOT NULL,
+  employee_id INT UNSIGNED NOT NULL,
+  sort_order  INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (entry_id, employee_id),
+  CONSTRAINT fk_pwes_entry FOREIGN KEY (entry_id) REFERENCES proactive_work_entry (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_pwes_employee FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE RESTRICT,
+  INDEX idx_employee (employee_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `proactive_work_entry_audit` (

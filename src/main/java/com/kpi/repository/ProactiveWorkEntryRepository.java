@@ -17,21 +17,32 @@ public interface ProactiveWorkEntryRepository extends JpaRepository<ProactiveWor
 
     List<ProactiveWorkEntry> findByIsDeletedFalseOrderByEffortStartDateDescCreatedAtDesc();
 
+    // v5 — "subject" now means "any of the entry's credited people" (the joint-credit
+    // subjectEmployeeIds collection), not just the legacy single subjectEmployeeId column.
+    // DISTINCT matters here: joining the collection can otherwise return the same entry once per
+    // matching id.
+    @Query("SELECT DISTINCT e FROM ProactiveWorkEntry e JOIN e.subjectEmployeeIds sid " +
+           "WHERE sid = :employeeId AND e.isDeleted = false " +
+           "ORDER BY e.effortStartDate DESC, e.createdAt DESC")
     List<ProactiveWorkEntry> findBySubjectEmployeeIdAndIsDeletedFalseOrderByEffortStartDateDescCreatedAtDesc(
-            Integer subjectEmployeeId);
+            @Param("employeeId") Integer subjectEmployeeId);
 
     // Explicit @Query rather than a derived findBySubjectEmployeeIdOrLoggedByIdAndIsDeletedFalse
     // method name — Spring Data parses "FindByAOrBAndC" as "A OR (B AND C)", not "(A OR B) AND
     // C", which would silently leak soft-deleted rows logged by the caller. An employee's own
-    // list must include entries they logged for someone else, not just ones they're the subject
-    // of — otherwise crediting a peer makes the entry vanish from the logger's own view.
-    @Query("SELECT e FROM ProactiveWorkEntry e WHERE e.isDeleted = false " +
-           "AND (e.subjectEmployeeId = :employeeId OR e.loggedById = :employeeId) " +
+    // list must include entries they logged for someone else, not just ones they're a credited
+    // subject of — otherwise crediting a peer makes the entry vanish from the logger's own view.
+    @Query("SELECT DISTINCT e FROM ProactiveWorkEntry e LEFT JOIN e.subjectEmployeeIds sid " +
+           "WHERE e.isDeleted = false " +
+           "AND (sid = :employeeId OR e.loggedById = :employeeId) " +
            "ORDER BY e.effortStartDate DESC, e.createdAt DESC")
     List<ProactiveWorkEntry> findBySubjectOrLoggedByAndIsDeletedFalse(@Param("employeeId") Integer employeeId);
 
+    @Query("SELECT DISTINCT e FROM ProactiveWorkEntry e JOIN e.subjectEmployeeIds sid " +
+           "WHERE sid IN :subjectEmployeeIds AND e.isDeleted = false " +
+           "ORDER BY e.effortStartDate DESC, e.createdAt DESC")
     List<ProactiveWorkEntry> findBySubjectEmployeeIdInAndIsDeletedFalseOrderByEffortStartDateDescCreatedAtDesc(
-            Collection<Integer> subjectEmployeeIds);
+            @Param("subjectEmployeeIds") Collection<Integer> subjectEmployeeIds);
 
     // Backs the KPI-detail widget (FR-PW-12) — one query for every measurement on the page.
     List<ProactiveWorkEntry> findByKpiMeasurementIdInAndIsDeletedFalse(Collection<Long> kpiMeasurementIds);

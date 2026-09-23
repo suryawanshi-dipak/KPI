@@ -154,7 +154,7 @@ export default function TeamSummaryPanel({ currentUser, employees }) {
         {entries === null ? (
           <p className="cell-sub">Loading…</p>
         ) : rows.length === 0 ? (
-          <p className="cell-sub">Nobody in scope has logged proactive work in this period.</p>
+          <p className="cell-sub">Nobody in scope has logged a work insight in this period.</p>
         ) : (
           <div className="table-wrap">
             <table className="data team-summary-grid">

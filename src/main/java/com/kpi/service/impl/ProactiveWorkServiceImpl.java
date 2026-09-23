@@ -15,6 +15,7 @@ import com.kpi.entity.ProactiveWorkEntry;
 import com.kpi.entity.enums.ProactiveWorkAuditActionType;
 import com.kpi.entity.enums.ProactiveWorkCategory;
 import com.kpi.entity.enums.ProactiveWorkEntryType;
+import com.kpi.entity.enums.ProactiveWorkKind;
 import com.kpi.entity.enums.ProactiveWorkVisibility;
 import com.kpi.entity.enums.Role;
 import com.kpi.entity.enums.NotificationType;
@@ -49,10 +50,13 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -74,33 +78,31 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         Employee actor = currentEmployeeOrThrow();
         validateRequest(request);
 
-        Integer subjectId = request.getSubjectEmployeeId();
-        if (actor.getRole() == Role.employee) {
-            // "Credit to" defaults to self but is not locked — any employee may credit any
-            // other employee (a manager, a peer on another team, etc.).
-            employeeRepository.findById(subjectId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Employee", subjectId));
-        } else if (actor.getRole() == Role.manager) {
-            boolean allowed = subjectId.equals(actor.getId()) || isDirectReport(actor.getId(), subjectId);
-            if (!allowed) {
-                throw new AccessDeniedException(
-                        "Managers can only log proactive work for themselves or their direct reports");
-            }
-        } else if (actor.getRole() == Role.admin) {
-            Integer adminSubjectId = subjectId;
-            employeeRepository.findById(adminSubjectId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Employee", adminSubjectId));
-        } else {
+        // Credit to works like a mention, not a hierarchy pick — every authenticated role may
+        // credit any employee(s), including a Manager crediting someone outside their own
+        // reporting line. (Previously Manager was restricted to self + direct reports; that
+        // restriction made "credit a teammate" impossible for a manager with no reports of
+        // their own.) Mentioning someone credits them alongside the logger, not instead of the
+        // logger — resolveCreateSubjectIds appends the actor if the request didn't already
+        // include them, so that rule holds even against a client that forgot to.
+        if (actor.getRole() != Role.employee && actor.getRole() != Role.manager && actor.getRole() != Role.admin) {
             throw new AccessDeniedException("Role not authorized to log proactive work");
+        }
+        List<Integer> subjectIds = resolveCreateSubjectIds(request, actor.getId());
+        for (Integer sid : subjectIds) {
+            // The actor is already loaded (currentEmployeeOrThrow above) — no need to look
+            // themselves up again just to confirm they exist.
+            if (sid.equals(actor.getId())) continue;
+            employeeRepository.findById(sid).orElseThrow(() -> new ResourceNotFoundException("Employee", sid));
         }
 
         KpiMeasurement measurement = null;
         if (request.getKpiMeasurementId() != null) {
             measurement = measurementRepository.findById(request.getKpiMeasurementId())
                     .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", request.getKpiMeasurementId()));
-            if (!measurement.getSubjectEmployeeId().equals(subjectId)) {
+            if (!subjectIds.contains(measurement.getSubjectEmployeeId())) {
                 throw new ProactiveWorkValidationException(
-                        "kpiMeasurementId", "This measurement doesn't belong to the credited employee.");
+                        "kpiMeasurementId", "This measurement doesn't belong to any of the credited employees.");
             }
         }
 
@@ -113,9 +115,14 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         ProactiveWorkEntry entry = ProactiveWorkEntry.builder()
                 .kpiMeasurementId(measurement != null ? measurement.getId() : null)
                 .category(request.getCategory())
+                .workKind(request.getWorkKind() != null ? request.getWorkKind() : ProactiveWorkKind.PROACTIVE)
                 .otherCategoryText(request.getCategory() == ProactiveWorkCategory.OTHER
                         ? request.getOtherCategoryText().trim() : null)
-                .subjectEmployeeId(subjectId)
+                // The legacy single-subject column is always the logger for entries created this
+                // way — see the field's own doc comment on ProactiveWorkEntry for why that's a
+                // safe, stable choice. subjectEmployeeIds carries the actual, possibly joint, credit.
+                .subjectEmployeeId(actor.getId())
+                .subjectEmployeeIds(subjectIds)
                 .loggedById(actor.getId())
                 .title(request.getTitle().trim())
                 .description(request.getDescription().trim())
@@ -151,21 +158,23 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
 
         validateRequest(request);
 
+        ProactiveWorkKind requestedWorkKind = request.getWorkKind() != null ? request.getWorkKind() : entry.getWorkKind();
         boolean locked = actor.getRole() != Role.admin
                 && entry.getEndorsementCount() != null && entry.getEndorsementCount() > 0;
         if (locked && (entry.getCategory() != request.getCategory()
+                || entry.getWorkKind() != requestedWorkKind
                 || !entry.getTitle().equals(request.getTitle().trim()))) {
             throw new ProactiveWorkValidationException("title",
-                    "Title and category lock once an entry has its first endorsement.");
+                    "Title, category and type lock once an entry has its first endorsement.");
         }
 
         KpiMeasurement measurement = null;
         if (request.getKpiMeasurementId() != null) {
             measurement = measurementRepository.findById(request.getKpiMeasurementId())
                     .orElseThrow(() -> new ResourceNotFoundException("KPI Measurement", request.getKpiMeasurementId()));
-            if (!measurement.getSubjectEmployeeId().equals(entry.getSubjectEmployeeId())) {
+            if (!entry.getSubjectEmployeeIds().contains(measurement.getSubjectEmployeeId())) {
                 throw new ProactiveWorkValidationException(
-                        "kpiMeasurementId", "This measurement doesn't belong to the credited employee.");
+                        "kpiMeasurementId", "This measurement doesn't belong to any of the credited employees.");
             }
         }
 
@@ -185,6 +194,7 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         if (!locked) {
             entry.setTitle(request.getTitle().trim());
             entry.setCategory(request.getCategory());
+            entry.setWorkKind(requestedWorkKind);
         }
         entry.setOtherCategoryText(request.getCategory() == ProactiveWorkCategory.OTHER
                 ? request.getOtherCategoryText().trim() : null);
@@ -270,8 +280,8 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         // FR-PW-06, tightened for org-wide visibility: many managers can now open the same
         // entry, but only the SUBJECT's own manager (or an admin) counts as "noticed by someone
         // who can act on it" — not just any manager who happened to browse the Everyone feed.
-        boolean isSubject = actor.getId().equals(entry.getSubjectEmployeeId());
-        if (!isSubject && isSubjectsManagerOrAdmin(actor, entry.getSubjectEmployeeId())
+        boolean isSubject = entry.getSubjectEmployeeIds().contains(actor.getId());
+        if (!isSubject && isSubjectsManagerOrAdmin(actor, entry)
                 && !Boolean.TRUE.equals(entry.getIsSeen())) {
             Map<String, Object> oldValues = snapshotOf(entry);
             entry.setIsSeen(true);
@@ -298,7 +308,7 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         }
         // Specifically the subject's own manager or an admin — not any manager who can merely
         // view an org-wide entry.
-        if (!isSubjectsManagerOrAdmin(actor, entry.getSubjectEmployeeId())) {
+        if (!isSubjectsManagerOrAdmin(actor, entry)) {
             throw new AccessDeniedException("Only the subject's manager or an admin can highlight an entry");
         }
 
@@ -329,7 +339,7 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         if (entry.getVisibility() == ProactiveWorkVisibility.PRIVATE) {
             throw new AccessDeniedException("Can't endorse a private entry");
         }
-        if (actor.getId().equals(entry.getSubjectEmployeeId())) {
+        if (entry.getSubjectEmployeeIds().contains(actor.getId())) {
             throw new AccessDeniedException("Can't endorse your own entry");
         }
 
@@ -452,23 +462,29 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
     /* ---------- RBAC ---------- */
 
     /** Can the actor open/read this entry at all. ORGANISATION visibility makes this true for
-     *  everyone — the entry's own visibility flag is what makes v2 different from v1, not role. */
+     *  everyone — the entry's own visibility flag is what makes v2 different from v1, not role.
+     *  v5 — "the subject" now means "any of the entry's credited people," not just the legacy
+     *  single subjectEmployeeId column, since one entry can jointly credit several. */
     private boolean isVisible(Employee actor, ProactiveWorkEntry entry) {
         if (actor.getRole() == Role.admin) return true;
         if (entry.getVisibility() == ProactiveWorkVisibility.ORGANISATION) return true;
-        if (actor.getId().equals(entry.getSubjectEmployeeId())) return true;
+        if (entry.getSubjectEmployeeIds().contains(actor.getId())) return true;
         if (actor.getId().equals(entry.getLoggedById())) return true;
-        if (actor.getRole() == Role.manager) return isDirectReport(actor.getId(), entry.getSubjectEmployeeId());
+        if (actor.getRole() == Role.manager) {
+            return entry.getSubjectEmployeeIds().stream().anyMatch(sid -> isDirectReport(actor.getId(), sid));
+        }
         return false;
     }
 
     /** A stricter, visibility-independent check — deliberately NOT short-circuited by
      *  ORGANISATION visibility, since "can read it" and "is this person's own manager" are
      *  different questions once anyone at Vitec can read an org-wide entry. Backs seen-stamping
-     *  and highlighting, both of which must stay scoped to the subject's real manager. */
-    private boolean isSubjectsManagerOrAdmin(Employee actor, Integer subjectEmployeeId) {
+     *  and highlighting, both of which must stay scoped to a credited subject's real manager —
+     *  true if the actor manages ANY of the (possibly several) credited people. */
+    private boolean isSubjectsManagerOrAdmin(Employee actor, ProactiveWorkEntry entry) {
         if (actor.getRole() == Role.admin) return true;
-        return actor.getRole() == Role.manager && isDirectReport(actor.getId(), subjectEmployeeId);
+        if (actor.getRole() != Role.manager) return false;
+        return entry.getSubjectEmployeeIds().stream().anyMatch(sid -> isDirectReport(actor.getId(), sid));
     }
 
     private boolean isDirectReport(Integer managerId, Integer employeeId) {
@@ -493,6 +509,27 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         }
         return employeeRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new AccessDeniedException("Current user not found"));
+    }
+
+    /** Resolves who a new entry credits: the plural subjectEmployeeIds when the caller sent one
+     *  (a new mention-based create), falling back to the legacy singular subjectEmployeeId for
+     *  any caller that still only sends that. Either way, the actor is appended if not already
+     *  present — mentioning someone credits them alongside the logger, never instead of the
+     *  logger, and this holds even against a client that forgot to include itself. Order is
+     *  preserved (mentioned people first, actor last, matching ProactiveWorkForm.jsx) and
+     *  duplicates are dropped. */
+    private List<Integer> resolveCreateSubjectIds(ProactiveWorkEntryRequest request, Integer actorId) {
+        LinkedHashSet<Integer> ids = new LinkedHashSet<>();
+        if (request.getSubjectEmployeeIds() != null) {
+            ids.addAll(request.getSubjectEmployeeIds());
+        } else if (request.getSubjectEmployeeId() != null) {
+            ids.add(request.getSubjectEmployeeId());
+        }
+        if (ids.isEmpty() && actorId == null) {
+            throw new ProactiveWorkValidationException("subjectEmployeeIds", "Choose who to credit this to.");
+        }
+        ids.add(actorId);
+        return List.copyOf(ids);
     }
 
     /* ---------- validation ---------- */
@@ -541,8 +578,10 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
     private Map<String, Object> snapshotOf(ProactiveWorkEntry e) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("category", e.getCategory());
+        m.put("workKind", e.getWorkKind());
         m.put("otherCategoryText", e.getOtherCategoryText());
         m.put("subjectEmployeeId", e.getSubjectEmployeeId());
+        m.put("subjectEmployeeIds", e.getSubjectEmployeeIds());
         m.put("title", e.getTitle());
         m.put("description", e.getDescription());
         m.put("valueStatement", e.getValueStatement());
@@ -558,8 +597,19 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
         return m;
     }
 
+    // Every existing screen renders subjectEmployeeName as-is (list rows, feed cards, the detail
+    // header, the KPI-detail widget) — joining every credited person's name here means "Bhavesh
+    // Bhimra & Dipak Suryawanshi" shows up everywhere with zero frontend changes, instead of
+    // exposing a plural name list every caller would need to know to join itself.
+    private String joinedSubjectName(List<Integer> subjectIds) {
+        return subjectIds.stream()
+                .map(id -> employeeRepository.findById(id).orElse(null))
+                .map(EmployeeUtils::resolveName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(" & "));
+    }
+
     private ProactiveWorkEntryResponse toResponse(ProactiveWorkEntry e, Employee actor) {
-        Employee subject = employeeRepository.findById(e.getSubjectEmployeeId()).orElse(null);
         Employee loggedBy = employeeRepository.findById(e.getLoggedById()).orElse(null);
         KpiMeasurement measurement = e.getKpiMeasurementId() != null
                 ? measurementRepository.findById(e.getKpiMeasurementId()).orElse(null) : null;
@@ -576,10 +626,12 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
                 .kpiMetricName(kpiVisible ? measurement.getKpiMetric().getName() : null)
                 .kpiMeasurementPeriodLabel(kpiVisible ? measurement.getMeasurementPeriodLabel() : null)
                 .entryType(resolveEntryType(e))
+                .workKind(e.getWorkKind())
                 .category(e.getCategory())
                 .otherCategoryText(e.getOtherCategoryText())
                 .subjectEmployeeId(e.getSubjectEmployeeId())
-                .subjectEmployeeName(EmployeeUtils.resolveName(subject))
+                .subjectEmployeeIds(e.getSubjectEmployeeIds())
+                .subjectEmployeeName(joinedSubjectName(e.getSubjectEmployeeIds()))
                 .loggedById(e.getLoggedById())
                 .loggedByName(EmployeeUtils.resolveName(loggedBy))
                 .title(e.getTitle())
@@ -638,14 +690,13 @@ public class ProactiveWorkServiceImpl implements ProactiveWorkService {
     }
 
     private ProactiveWorkEntrySummaryResponse toSummary(ProactiveWorkEntry e) {
-        Employee subject = employeeRepository.findById(e.getSubjectEmployeeId()).orElse(null);
         Employee loggedBy = employeeRepository.findById(e.getLoggedById()).orElse(null);
         return ProactiveWorkEntrySummaryResponse.builder()
                 .id(e.getId())
                 .title(e.getTitle())
                 .description(e.getDescription())
                 .category(e.getCategory())
-                .subjectEmployeeName(EmployeeUtils.resolveName(subject))
+                .subjectEmployeeName(joinedSubjectName(e.getSubjectEmployeeIds()))
                 .loggedByName(EmployeeUtils.resolveName(loggedBy))
                 .effortStartDate(e.getEffortStartDate())
                 .effortEndDate(e.getEffortEndDate())

@@ -163,7 +163,7 @@ export default function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="notification-dropdown__empty">
                 <p>No notifications yet</p>
-                <small>Updates when colleagues log proactive work appear here.</small>
+                <small>Updates when colleagues log a work insight appear here.</small>
               </div>
             ) : (
               notifications.map((n) => {

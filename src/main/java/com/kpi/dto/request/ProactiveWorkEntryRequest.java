@@ -1,6 +1,7 @@
 package com.kpi.dto.request;
 
 import com.kpi.entity.enums.ProactiveWorkCategory;
+import com.kpi.entity.enums.ProactiveWorkKind;
 import com.kpi.entity.enums.ProactiveWorkVisibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -11,6 +12,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Create-only payload — Increment 1 has no edit/delete endpoint (FR-PW-05 admin correction is
@@ -25,11 +27,21 @@ import java.time.LocalDate;
 @Builder
 public class ProactiveWorkEntryRequest {
 
-    @NotNull(message = "Choose who to credit this to.")
+    // v4 — a create can mention several people at once (subjectEmployeeIds, plural); an update
+    // still sends the single subject an entry already has (subjectEmployeeId, singular) since
+    // credit-to is never changed by an edit. Neither is @NotNull here — ProactiveWorkServiceImpl
+    // resolves whichever the caller sent (and requires at least one) rather than bean-validating
+    // a field that's conditionally required depending on create vs. update.
     private Integer subjectEmployeeId;
+
+    private List<Integer> subjectEmployeeIds;
 
     @NotNull(message = "Category is required.")
     private ProactiveWorkCategory category;
+
+    // v3 — null defaults to PROACTIVE in the service, matching how `visibility` was added: every
+    // caller that predates this field (existing tests, any client not yet updated) keeps working.
+    private ProactiveWorkKind workKind;
 
     @Size(max = 300, message = "Keep this under 300 characters.")
     private String otherCategoryText;

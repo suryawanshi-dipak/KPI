@@ -24,6 +24,11 @@ const CATEGORY_LABELS = {
   EXTRA_HOURS: "Extra Hours",
   RESOURCE_SAVING: "Resource Saving",
   PROCESS_IMPROVEMENT: "Process Improvement",
+  TECHNICAL_MISSOUT: "Technical Missouts",
+  FUNCTIONAL_MISSOUT: "Functional Missouts",
+  COMMUNICATION_MISSOUT: "Communication Missouts",
+  PROCESS_MISSOUT: "Process Missouts",
+  TIMELINE_MISSOUT: "Timeline Missouts",
   OTHER: "Other",
 };
 
@@ -31,6 +36,12 @@ function categoryLabel(entry) {
   if (!entry) return "—";
   if (entry.category === "OTHER" && entry.other_category_text) return entry.other_category_text;
   return CATEGORY_LABELS[entry.category] || entry.category || "—";
+}
+
+// Pre-migration rows (or a response from before this field existed) have no work_kind at all —
+// treated as PROACTIVE, matching the DB column's own DEFAULT.
+function isMissout(entry) {
+  return entry?.work_kind === "MISSOUT";
 }
 
 function formatWhen(entry) {
@@ -161,7 +172,7 @@ export default function ProactiveWork() {
         const refreshed = await getProactiveWorkEntry(viewingId);
         setViewingEntry(refreshed);
       }
-      flash(payload.id ? "Proactive work updated" : "Proactive work logged");
+      flash(payload.id ? "Work insight updated" : "Work insight logged");
     } catch (err) {
       flash(err.message || "Failed to save entry");
     } finally {
@@ -195,7 +206,7 @@ export default function ProactiveWork() {
   }
 
   if (!currentUser || (tab !== "everyone" && entries === null)) {
-    return <Layout crumb={<b>Proactive Work</b>}><Spinner /></Layout>;
+    return <Layout crumb={<b>Work Insights</b>}><Spinner /></Layout>;
   }
 
   const canFilterByEmployee = (currentUser.role === "manager" || currentUser.role === "admin") && tab === "my-team";
@@ -220,11 +231,11 @@ export default function ProactiveWork() {
   });
 
   return (
-    <Layout crumb={<b>Proactive Work</b>}>
+    <Layout crumb={<b>Work Insights</b>}>
       <div className="page-head">
         <div>
-          <h1>Proactive Work</h1>
-          <p>Effort worth remembering that no KPI captures.</p>
+          <h1>Work Insights</h1>
+          <p>The wins and the misses no KPI captures.</p>
         </div>
         <div style={{ display: "flex", gap: "0.6rem" }}>
           {canOpenTeamSummary && (
@@ -233,7 +244,7 @@ export default function ProactiveWork() {
             </button>
           )}
           <button className="btn btn--primary" onClick={() => setAdding(true)}>
-            <Icon.plus /> Log proactive work
+            <Icon.plus /> Log work insight
           </button>
         </div>
       </div>
@@ -281,9 +292,9 @@ export default function ProactiveWork() {
         {filtered.length === 0 ? (
           <div className="empty">
             <h3>Nothing logged yet</h3>
-            <p>Staying late, covering for a teammate, an unasked-for improvement — log it here.</p>
+            <p>Staying late, covering for a teammate, a missed deadline — log it here.</p>
             <button className="btn btn--primary" onClick={() => setAdding(true)} style={{ marginTop: "0.8rem" }}>
-              <Icon.plus /> Log proactive work
+              <Icon.plus /> Log work insight
             </button>
           </div>
         ) : (
@@ -293,6 +304,7 @@ export default function ProactiveWork() {
                 <tr>
                   <th>What they did</th>
                   <th>Employee</th>
+                  <th>Type</th>
                   <th>Category</th>
                   <th>When</th>
                   <th>Linked KPI</th>
@@ -312,6 +324,11 @@ export default function ProactiveWork() {
                     <td>
                       <div>{e.subject_employee_name}</div>
                       <div className="cell-sub">logged by {e.logged_by_name}</div>
+                    </td>
+                    <td>
+                      <span className={`pill ${isMissout(e) ? "pill--amber" : "pill--green"}`}>
+                        {isMissout(e) ? "MISSOUT" : "PROACTIVE"}
+                      </span>
                     </td>
                     <td><span className="tag">{categoryLabel(e)}</span></td>
                     <td className="mono">{formatWhen(e)}</td>
@@ -361,8 +378,8 @@ export default function ProactiveWork() {
       )}
 
       {(adding || editingEntry) && (
-        <Modal title={editingEntry ? "Edit proactive work" : "Log proactive work"}
-          subtitle="Something you did that no KPI would show."
+        <Modal title={editingEntry ? "Edit work insight" : "Log work insight"}
+          subtitle="Something worth recognizing — or a miss worth naming — that no KPI would show."
           onClose={() => { setAdding(false); setEditingEntry(null); }}>
           <ProactiveWorkForm currentUser={currentUser} initial={editingEntry} saving={saving}
             onSubmit={handleSave} onCancel={() => { setAdding(false); setEditingEntry(null); }} />
@@ -370,7 +387,7 @@ export default function ProactiveWork() {
       )}
 
       {viewingId != null && (
-        <Modal title="Proactive Work" onClose={closeViewing}>
+        <Modal title="Work Insight" onClose={closeViewing}>
           {viewingLoading || !viewingEntry ? <Spinner /> : (
             <ProactiveWorkDetail
               entry={viewingEntry}

@@ -2,12 +2,15 @@ package com.kpi.entity;
 
 import com.kpi.entity.enums.ProactiveWorkCategory;
 import com.kpi.entity.enums.ProactiveWorkEntryType;
+import com.kpi.entity.enums.ProactiveWorkKind;
 import com.kpi.entity.enums.ProactiveWorkVisibility;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * subjectEmployeeId / loggedById / seenById are stored as raw employee IDs rather than
@@ -43,11 +46,35 @@ public class ProactiveWorkEntry {
     @Column(nullable = false)
     private ProactiveWorkCategory category;
 
+    // v3 — PROACTIVE (effort worth crediting) or MISSOUT (a self-reported shortfall). Additive
+    // column, NOT NULL DEFAULT 'PROACTIVE' in the DB so every pre-existing row reads as PROACTIVE
+    // without a backfill statement.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_kind", nullable = false)
+    @Builder.Default
+    private ProactiveWorkKind workKind = ProactiveWorkKind.PROACTIVE;
+
     @Column(name = "other_category_text", length = 300)
     private String otherCategoryText;
 
+    // v4 — the legacy "one subject" column. For entries created since joint credit shipped, this
+    // is always the logger (loggedById) — see ProactiveWorkServiceImpl#create — kept as a stable
+    // single value for the handful of places that still want exactly one id (e.g. an avatar's
+    // colour hash), while subjectEmployeeIds below is the actual, possibly-multi-person, set of
+    // credited people.
     @Column(name = "subject_employee_id", nullable = false)
     private Integer subjectEmployeeId;
+
+    // v4 — every credited person, in the order they were added (mentioned people first, then
+    // the logger last — see ProactiveWorkForm.jsx). A plain value-type collection table, not a
+    // relation to Employee, mirroring how subjectEmployeeId/loggedById are already raw ids
+    // rather than @ManyToOne — referenced employees are validated in the service layer.
+    @ElementCollection
+    @CollectionTable(name = "proactive_work_entry_subject", joinColumns = @JoinColumn(name = "entry_id"))
+    @OrderColumn(name = "sort_order")
+    @Column(name = "employee_id", nullable = false)
+    @Builder.Default
+    private List<Integer> subjectEmployeeIds = new ArrayList<>();
 
     @Column(name = "logged_by_id", nullable = false)
     private Integer loggedById;
@@ -126,6 +153,7 @@ public class ProactiveWorkEntry {
         if (isHighlighted == null) isHighlighted = false;
         if (isDeleted == null) isDeleted = false;
         if (visibility == null) visibility = ProactiveWorkVisibility.ORGANISATION;
+        if (workKind == null) workKind = ProactiveWorkKind.PROACTIVE;
         if (endorsementCount == null) endorsementCount = 0;
         if (commentCount == null) commentCount = 0;
     }

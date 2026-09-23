@@ -46,6 +46,13 @@ export const ENUMS = {
     "ATTENDANCE_PUNCTUALITY", "TEAM_SUPPORT", "INITIATIVE_IDEA",
     "EXTRA_HOURS", "RESOURCE_SAVING", "PROCESS_IMPROVEMENT", "OTHER",
   ],
+  // Same `category` column as proactiveWorkCategory above, different offered subset — picked
+  // based on the entry's work_kind (see ProactiveWorkForm.jsx).
+  missoutCategory: [
+    "TECHNICAL_MISSOUT", "FUNCTIONAL_MISSOUT", "COMMUNICATION_MISSOUT",
+    "PROCESS_MISSOUT", "TIMELINE_MISSOUT", "OTHER",
+  ],
+  proactiveWorkKind: ["PROACTIVE", "MISSOUT"],
 };
 
 
@@ -1705,9 +1712,14 @@ function mapProactiveWorkToFrontend(b) {
     kpi_metric_name: b.kpiMetricName,
     kpi_measurement_period_label: b.kpiMeasurementPeriodLabel,
     entry_type: b.entryType,
+    work_kind: b.workKind,
     category: b.category,
     other_category_text: b.otherCategoryText,
+    // subject_employee_id stays as the legacy single "primary" (the logger, for entries created
+    // since joint credit shipped). subject_employee_ids is the full credited set; subject_employee_name
+    // is already the " & "-joined display name for all of them, from the server.
     subject_employee_id: b.subjectEmployeeId,
+    subject_employee_ids: b.subjectEmployeeIds,
     subject_employee_name: b.subjectEmployeeName,
     logged_by_id: b.loggedById,
     logged_by_name: b.loggedByName,
@@ -1750,7 +1762,7 @@ export async function listProactiveWork(filters = {}) {
   const res = await fetch(`${API_BASE}/proactive-work${qs}`, { headers });
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.message || "Failed to fetch proactive work entries");
+    throw new Error(errorJson.message || "Failed to fetch work insights");
   }
   const json = await res.json();
   return (json.data || []).map(mapProactiveWorkToFrontend);
@@ -1766,7 +1778,7 @@ export async function getProactiveWorkEntry(id) {
   const res = await fetch(`${API_BASE}/proactive-work/${id}`, { headers });
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.message || `Failed to fetch proactive work entry ${id}`);
+    throw new Error(errorJson.message || `Failed to fetch work insight ${id}`);
   }
   const json = await res.json();
   return mapProactiveWorkToFrontend(json.data);
@@ -1774,8 +1786,14 @@ export async function getProactiveWorkEntry(id) {
 
 function proactiveWorkRequestBody(payload) {
   return {
-    subjectEmployeeId: Number(payload.subject_employee_id),
+    // A create sends subject_employee_ids (plural, one or more mentioned people plus yourself —
+    // see ProactiveWorkForm.jsx); an edit sends the single subject_employee_id its entry already
+    // has, since credit-to is never changed by an edit.
+    subjectEmployeeId: payload.subject_employee_id != null ? Number(payload.subject_employee_id) : null,
+    subjectEmployeeIds: Array.isArray(payload.subject_employee_ids)
+      ? payload.subject_employee_ids.map(Number) : null,
     category: payload.category,
+    workKind: payload.work_kind || "PROACTIVE",
     otherCategoryText: payload.category === "OTHER" ? payload.other_category_text : null,
     title: payload.title,
     description: payload.description,
@@ -1787,6 +1805,9 @@ function proactiveWorkRequestBody(payload) {
   };
 }
 
+/** Creates (or edits) one entry — a create can jointly credit several people in a single call
+ *  (subject_employee_ids), which the server stores as one entry with a " & "-joined display name
+ *  rather than one entry per person. */
 export async function saveProactiveWorkEntry(payload) {
   const token = await getToken();
   const headers = authHeaders(token);
@@ -1798,7 +1819,7 @@ export async function saveProactiveWorkEntry(payload) {
   });
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.message || (isEdit ? "Failed to update proactive work entry" : "Failed to log proactive work"));
+    throw new Error(errorJson.message || (isEdit ? "Failed to update work insight" : "Failed to log work insight"));
   }
   const json = await res.json();
   return mapProactiveWorkToFrontend(json.data);

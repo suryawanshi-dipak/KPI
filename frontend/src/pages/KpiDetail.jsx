@@ -145,7 +145,7 @@ export default function KpiDetail() {
       await saveProactiveWorkEntry(p);
       setLoggingProactive(false);
       await load();
-      flash("Proactive work logged");
+      flash("Work insight logged");
     } finally {
       setSavingProactive(false);
     }
@@ -297,14 +297,14 @@ export default function KpiDetail() {
 
       <div className="card" style={{ marginTop: "1.1rem" }}>
         <div className="card__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Proactive work linked to this KPI</h3>
+          <h3 style={{ margin: 0 }}>Work insights linked to this KPI</h3>
           <button className="btn btn--ghost" onClick={() => setLoggingProactive(true)}>
-            <Icon.plus /> Log proactive work
+            <Icon.plus /> Log work insight
           </button>
         </div>
         <div className="card__body">
           {proactiveEntries.length === 0 ? (
-            <p className="cell-sub">No proactive work logged against this KPI yet.</p>
+            <p className="cell-sub">No work insights logged against this KPI yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
               {proactiveEntries.map((pe) => (
@@ -324,7 +324,7 @@ export default function KpiDetail() {
         </Modal>
       )}
       {loggingProactive && (
-        <Modal title="Log proactive work" subtitle="Something you did that no KPI would show." onClose={() => setLoggingProactive(false)}>
+        <Modal title="Log work insight" subtitle="Something worth recognizing — or a miss worth naming — that no KPI would show." onClose={() => setLoggingProactive(false)}>
           <ProactiveWorkForm currentUser={currentUser} lockedKpiMeasurementId={latest?.id}
             saving={savingProactive} onSubmit={handleSaveProactive} onCancel={() => setLoggingProactive(false)} />
         </Modal>

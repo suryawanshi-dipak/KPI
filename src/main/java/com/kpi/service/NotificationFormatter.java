@@ -48,6 +48,11 @@ public class NotificationFormatter {
             case EXTRA_HOURS -> "Extra Hours";
             case RESOURCE_SAVING -> "Resource Saving";
             case PROCESS_IMPROVEMENT -> "Process Improvement";
+            case TECHNICAL_MISSOUT -> "Technical Missouts";
+            case FUNCTIONAL_MISSOUT -> "Functional Missouts";
+            case COMMUNICATION_MISSOUT -> "Communication Missouts";
+            case PROCESS_MISSOUT -> "Process Missouts";
+            case TIMELINE_MISSOUT -> "Timeline Missouts";
             case OTHER -> (otherText != null && !otherText.isBlank()) ? otherText.trim() : "Other";
         };
     }
