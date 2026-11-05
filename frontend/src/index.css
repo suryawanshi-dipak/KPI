@@ -92,6 +92,8 @@ h1,h2,h3,h4{font-weight:600;letter-spacing:-.01em;line-height:1.2}
 .pill{display:inline-flex;align-items:center;gap:.35rem;padding:.18rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
 .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .pill--green{color:var(--ok);background:var(--ok-bg)}
+/* KPI-29: Achievement pill style */
+.pill--blue{color:#1d4ed8;background:#eff6ff}
 .pill--amber{color:var(--warn);background:var(--warn-bg)}
 .pill--red{color:var(--bad);background:var(--bad-bg)}
 .pill--critical{color:#fff;background:var(--bad)}

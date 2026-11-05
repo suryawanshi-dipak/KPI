@@ -19,6 +19,11 @@ const CATEGORY_LABELS = {
   COMMUNICATION_MISSOUT: "Communication Missouts",
   PROCESS_MISSOUT: "Process Missouts",
   TIMELINE_MISSOUT: "Timeline Missouts",
+  // KPI-29: Achievement category labels
+  KRA_DELIVERY: "KRA / Responsibility Delivery",
+  MILESTONE_ACHIEVED: "Milestone / Target Achieved",
+  QUALITY_STANDARDS: "Quality & SLA Compliance",
+  OPERATIONAL_EXCELLENCE: "Operational Excellence",
   OTHER: "Other",
 };
 
@@ -34,6 +39,11 @@ const CATEGORY_ICONS = {
   COMMUNICATION_MISSOUT: "💬",
   PROCESS_MISSOUT: "📋",
   TIMELINE_MISSOUT: "⏳",
+  // KPI-29: Achievement category icons
+  KRA_DELIVERY: "🎯",
+  MILESTONE_ACHIEVED: "🏆",
+  QUALITY_STANDARDS: "✅",
+  OPERATIONAL_EXCELLENCE: "⚡",
   OTHER: "📌",
 };
 
@@ -49,6 +59,11 @@ const CATEGORY_CHIP_STYLE = {
   COMMUNICATION_MISSOUT: { background: "#fdf4e3", color: "#a16207" },
   PROCESS_MISSOUT: { background: "#fff7ed", color: "#9a3412" },
   TIMELINE_MISSOUT: { background: "#fef3c7", color: "#92400e" },
+  // KPI-29: Achievement category chip styles
+  KRA_DELIVERY: { background: "#eff6ff", color: "#1d4ed8" },
+  MILESTONE_ACHIEVED: { background: "#f0fdf4", color: "#15803d" },
+  QUALITY_STANDARDS: { background: "#fdf4ff", color: "#86198f" },
+  OPERATIONAL_EXCELLENCE: { background: "#ecfeff", color: "#0e7490" },
   OTHER: { background: "var(--surface-2)", color: "var(--muted)" },
 };
 
@@ -218,8 +233,11 @@ export default function ProactiveWorkDetail({ entry, currentUser, onChanged, onE
       <div className="pwd-chips">
         <span className="pwd-chip" style={entry.work_kind === "MISSOUT"
           ? { background: "var(--warn-bg)", color: "var(--warn)" }
+          : entry.work_kind === "ACHIEVEMENT"
+          ? { background: "#eff6ff", color: "#1d4ed8" }
           : { background: "var(--ok-bg)", color: "var(--ok)" }}>
-          {entry.work_kind === "MISSOUT" ? "Missout" : "Proactive"}
+          {/* KPI-29: Achievement label */}
+          {entry.work_kind === "MISSOUT" ? "Missout" : entry.work_kind === "ACHIEVEMENT" ? "Achievement" : "Proactive"}
         </span>
         <span className="pwd-chip" style={chipStyle}>
           {CATEGORY_ICONS[entry.category] || "📌"} {categoryLabel(entry)}

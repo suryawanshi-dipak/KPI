@@ -53,6 +53,11 @@ public class NotificationFormatter {
             case COMMUNICATION_MISSOUT -> "Communication Missouts";
             case PROCESS_MISSOUT -> "Process Missouts";
             case TIMELINE_MISSOUT -> "Timeline Missouts";
+            // KPI-29: Achievement category labels
+            case KRA_DELIVERY -> "KRA / Responsibility Delivery";
+            case MILESTONE_ACHIEVED -> "Milestone / Target Achieved";
+            case QUALITY_STANDARDS -> "Quality & SLA Compliance";
+            case OPERATIONAL_EXCELLENCE -> "Operational Excellence";
             case OTHER -> (otherText != null && !otherText.isBlank()) ? otherText.trim() : "Other";
         };
     }

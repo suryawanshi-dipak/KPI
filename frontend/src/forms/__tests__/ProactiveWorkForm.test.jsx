@@ -72,6 +72,8 @@ describe("ProactiveWorkForm — Proactive/Missout type", () => {
 
     expect(screen.getByLabelText(/^proactive$/i).checked).toBe(true);
     expect(screen.getByLabelText(/^missout$/i).checked).toBe(false);
+    // KPI-29: Verify Achievements radio button is unchecked by default
+    expect(screen.getByLabelText(/^achievements$/i).checked).toBe(false);
 
     await userEvent.type(fieldControl(/what did you do/i), "Covered the on-call rotation");
     await userEvent.selectOptions(fieldControl(/^category/i), "TEAM_SUPPORT");
@@ -104,6 +106,28 @@ describe("ProactiveWorkForm — Proactive/Missout type", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0].work_kind).toBe("MISSOUT");
     expect(onSubmit.mock.calls[0][0].category).toBe("TIMELINE_MISSOUT");
+  });
+
+  // KPI-29: Test Achievements selection and submission
+  it("switches to Achievements when picked (KPI-29)", async () => {
+    const onSubmit = vi.fn();
+    render(<ProactiveWorkForm currentUser={CURRENT_USER} onSubmit={onSubmit} onCancel={() => {}} />);
+
+    await userEvent.click(screen.getByLabelText(/^achievements$/i));
+    expect(screen.getByLabelText(/^achievements$/i).checked).toBe(true);
+    expect(screen.getByLabelText(/^proactive$/i).checked).toBe(false);
+    expect(screen.getByLabelText(/^missout$/i).checked).toBe(false);
+
+    await userEvent.type(fieldControl(/what did you do/i), "Completed all quarterly KRA deliverables");
+    await userEvent.selectOptions(fieldControl(/^category/i), "KRA_DELIVERY");
+    await userEvent.type(fieldControl(/^details/i), "Delivered on-time sprint milestones and maintained SLA");
+    await userEvent.type(fieldControl(/^impact/i), "Zero defects and on-schedule client release");
+
+    fireEvent.click(screen.getByRole("button", { name: /save entry/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].work_kind).toBe("ACHIEVEMENT");
+    expect(onSubmit.mock.calls[0][0].category).toBe("KRA_DELIVERY");
   });
 
   it("resets the chosen category when Type changes, since the option lists differ", async () => {

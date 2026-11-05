@@ -29,6 +29,11 @@ const CATEGORY_LABELS = {
   COMMUNICATION_MISSOUT: "Communication Missouts",
   PROCESS_MISSOUT: "Process Missouts",
   TIMELINE_MISSOUT: "Timeline Missouts",
+  // KPI-29: Achievement category labels
+  KRA_DELIVERY: "KRA / Responsibility Delivery",
+  MILESTONE_ACHIEVED: "Milestone / Target Achieved",
+  QUALITY_STANDARDS: "Quality & SLA Compliance",
+  OPERATIONAL_EXCELLENCE: "Operational Excellence",
   OTHER: "Other",
 };
 
@@ -42,6 +47,11 @@ function categoryLabel(entry) {
 // treated as PROACTIVE, matching the DB column's own DEFAULT.
 function isMissout(entry) {
   return entry?.work_kind === "MISSOUT";
+}
+
+// KPI-29: Helper to check if entry is Achievement
+function isAchievement(entry) {
+  return entry?.work_kind === "ACHIEVEMENT";
 }
 
 function formatWhen(entry) {
@@ -79,8 +89,11 @@ export default function ProactiveWork() {
 
   useEffect(() => {
     if (id) {
-      setViewingId(Number(id));
-      triggerPermissionPromptIfFirstTime();
+      const timer = setTimeout(() => {
+        setViewingId(Number(id));
+        triggerPermissionPromptIfFirstTime();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [id]);
 
@@ -209,6 +222,7 @@ export default function ProactiveWork() {
     return <Layout crumb={<b>Work Insights</b>}><Spinner /></Layout>;
   }
 
+  const isAdmin = currentUser?.role === "admin";
   const canFilterByEmployee = (currentUser.role === "manager" || currentUser.role === "admin") && tab === "my-team";
   const canHighlight = currentUser.role === "manager" || currentUser.role === "admin";
   const canOpenTeamSummary = currentUser.role === "manager" || currentUser.role === "admin";
@@ -230,6 +244,12 @@ export default function ProactiveWork() {
     );
   });
 
+  // KPI-28 export csv button: Export filtered work insight records to CSV
+  const handleExportCsv = () => {
+    exportWorkInsightsCsv(filtered);
+    flash(`Exported ${filtered.length} work insight${filtered.length === 1 ? "" : "s"} to CSV`);
+  };
+
   return (
     <Layout crumb={<b>Work Insights</b>}>
       <div className="page-head">
@@ -238,6 +258,16 @@ export default function ProactiveWork() {
           <p>The wins and the misses no KPI captures.</p>
         </div>
         <div style={{ display: "flex", gap: "0.6rem" }}>
+          {/* KPI-28 export csv button: visible only to admin */}
+          {isAdmin && (
+            <button
+              className="btn btn--sub"
+              title="Download filtered work insights as a CSV file (opens in Excel)"
+              onClick={handleExportCsv}
+            >
+              Export to CSV
+            </button>
+          )}
           {canOpenTeamSummary && (
             <button className="btn btn--ghost" onClick={() => setShowTeamSummary((s) => !s)}>
               Team Summary
@@ -326,8 +356,9 @@ export default function ProactiveWork() {
                       <div className="cell-sub">logged by {e.logged_by_name}</div>
                     </td>
                     <td>
-                      <span className={`pill ${isMissout(e) ? "pill--amber" : "pill--green"}`}>
-                        {isMissout(e) ? "MISSOUT" : "PROACTIVE"}
+                      {/* KPI-29: Support Achievement pill */}
+                      <span className={`pill ${isMissout(e) ? "pill--amber" : isAchievement(e) ? "pill--blue" : "pill--green"}`}>
+                        {e.work_kind === "ACHIEVEMENT" ? "ACHIEVEMENT" : isMissout(e) ? "MISSOUT" : "PROACTIVE"}
                       </span>
                     </td>
                     <td><span className="tag">{categoryLabel(e)}</span></td>
@@ -404,3 +435,84 @@ export default function ProactiveWork() {
     </Layout>
   );
 }
+
+// KPI-28 export csv button: Escape a CSV cell value per RFC 4180
+function csvEscape(value) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+// KPI-28 export csv button: Normalize timestamp for spreadsheet readability
+function formatCreatedAt(value) {
+  if (!value) return "";
+  return String(value).replace("T", " ").slice(0, 19);
+}
+
+// KPI-28 export csv button: Trigger a browser download of CSV content
+function downloadCsv(content, filename) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// KPI-28 export csv button: Compile filtered work insight rows into a CSV spreadsheet and download it
+function exportWorkInsightsCsv(insightList) {
+  const headers = [
+    "What They Did (Title)",
+    "Description",
+    "Value Statement",
+    "Employee",
+    "Logged By",
+    "Type",
+    "Category",
+    "When",
+    "Effort Start Date",
+    "Effort End Date",
+    "Linked KPI Metric",
+    "Linked KPI Period",
+    "Status",
+    "Highlighted",
+    "Endorsements",
+    "Comments Count",
+    "Visibility",
+    "Created At",
+  ];
+
+  let csv = headers.map(csvEscape).join(",") + "\n";
+
+  insightList.forEach((e) => {
+    const row = [
+      csvEscape(e.title || ""),
+      csvEscape(e.description || ""),
+      csvEscape(e.value_statement || ""),
+      csvEscape(e.subject_employee_name || ""),
+      csvEscape(e.logged_by_name || ""),
+      // KPI-29: Export actual work_kind (PROACTIVE, MISSOUT, or ACHIEVEMENT)
+      csvEscape(e.work_kind || "PROACTIVE"),
+      csvEscape(categoryLabel(e)),
+      csvEscape(formatWhen(e)),
+      csvEscape(e.effort_start_date || ""),
+      csvEscape(e.effort_end_date || ""),
+      csvEscape(e.kpi_metric_name || ""),
+      csvEscape(e.kpi_measurement_period_label || ""),
+      csvEscape(e.is_seen ? "SEEN" : "NEW"),
+      csvEscape(e.is_highlighted ? "Yes" : "No"),
+      csvEscape(e.endorsement_count || 0),
+      csvEscape(e.comment_count || 0),
+      csvEscape(e.visibility || ""),
+      csvEscape(formatCreatedAt(e.created_at)),
+    ];
+    csv += row.join(",") + "\n";
+  });
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(csv, `Work_Insights_${dateStamp}.csv`);
+}
+

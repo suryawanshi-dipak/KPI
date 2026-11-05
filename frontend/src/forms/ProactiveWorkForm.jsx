@@ -14,12 +14,19 @@ const CATEGORY_LABELS = {
   COMMUNICATION_MISSOUT: "Communication Missouts",
   PROCESS_MISSOUT: "Process Missouts",
   TIMELINE_MISSOUT: "Timeline Missouts",
+  // KPI-29: Achievement category labels
+  KRA_DELIVERY: "KRA / Responsibility Delivery",
+  MILESTONE_ACHIEVED: "Milestone / Target Achieved",
+  QUALITY_STANDARDS: "Quality & SLA Compliance",
+  OPERATIONAL_EXCELLENCE: "Operational Excellence",
   OTHER: "Other",
 };
 
 const KIND_LABELS = {
   PROACTIVE: "Proactive",
   MISSOUT: "Missout",
+  // KPI-29: Added Achievements radio button label
+  ACHIEVEMENT: "Achievements",
 };
 
 // Example text in every free-text field switches with Type, so a Missout entry isn't guided by
@@ -34,6 +41,12 @@ const PLACEHOLDERS = {
     title: "e.g. Missed the deployment window for the release",
     details: "What happened, and what went wrong.",
     impact: "e.g. Caused a 2-hour delay in the release",
+  },
+  // KPI-29: Contextual placeholders when logging Achievements (KRA / Responsibility fulfillment)
+  ACHIEVEMENT: {
+    title: "e.g. Delivered sprint deliverables and fulfilled all weekly QA responsibilities on time",
+    details: "What responsibility or KRA was fulfilled, and how standards were met.",
+    impact: "e.g. Achieved 100% test pass rate with zero release defects",
   },
 };
 
@@ -105,7 +118,13 @@ export default function ProactiveWorkForm({ currentUser, initial, lockedKpiMeasu
 
   // Category options depend on the entry's Type — Missout has its own set on the same underlying
   // column (see ProactiveWorkCategory.java).
-  const categoryOptions = form.work_kind === "MISSOUT" ? ENUMS.missoutCategory : ENUMS.proactiveWorkCategory;
+  // KPI-29: Category options depend on the entry's Type (Proactive, Missout, or Achievements)
+  const categoryOptions =
+    form.work_kind === "MISSOUT"
+      ? ENUMS.missoutCategory
+      : form.work_kind === "ACHIEVEMENT"
+      ? ENUMS.achievementCategory
+      : ENUMS.proactiveWorkCategory;
 
   // Credit to is a mention, not a hierarchy pick — every role can mention any employee, including
   // themselves. (Previously Manager was scoped to direct reports only; that restriction is gone.)

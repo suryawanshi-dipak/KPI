@@ -52,7 +52,16 @@ export const ENUMS = {
     "TECHNICAL_MISSOUT", "FUNCTIONAL_MISSOUT", "COMMUNICATION_MISSOUT",
     "PROCESS_MISSOUT", "TIMELINE_MISSOUT", "OTHER",
   ],
-  proactiveWorkKind: ["PROACTIVE", "MISSOUT"],
+  // KPI-29: Achievement-specific categories for fulfilling core KRA / responsibilities
+  achievementCategory: [
+    "KRA_DELIVERY",
+    "MILESTONE_ACHIEVED",
+    "QUALITY_STANDARDS",
+    "OPERATIONAL_EXCELLENCE",
+    "OTHER",
+  ],
+  // KPI-29: Added ACHIEVEMENT to proactiveWorkKind
+  proactiveWorkKind: ["PROACTIVE", "MISSOUT", "ACHIEVEMENT"],
 };
 
 

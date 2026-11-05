@@ -1,7 +1,8 @@
 package com.kpi.entity.enums;
 
-/** Shared by both {@link ProactiveWorkKind} values on one column: the first six are meaningful
- *  for PROACTIVE entries, the five *_MISSOUT values for MISSOUT entries, and OTHER for either.
+/** Shared by all {@link ProactiveWorkKind} values on one column: the first six are meaningful
+ *  for PROACTIVE entries, the five *_MISSOUT values for MISSOUT entries, the four achievement
+ *  values for ACHIEVEMENT entries (KPI-29), and OTHER for any.
  *  The frontend offers only the relevant subset per kind; the server does not cross-validate
  *  category against workKind — that's a UI convenience, not an integrity rule. */
 public enum ProactiveWorkCategory {
@@ -16,5 +17,10 @@ public enum ProactiveWorkCategory {
     COMMUNICATION_MISSOUT,
     PROCESS_MISSOUT,
     TIMELINE_MISSOUT,
+    // KPI-29: Achievement-specific categories for fulfilling core KRA / responsibilities
+    KRA_DELIVERY,
+    MILESTONE_ACHIEVED,
+    QUALITY_STANDARDS,
+    OPERATIONAL_EXCELLENCE,
     OTHER
 }

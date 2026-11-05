@@ -1,8 +1,9 @@
 -- Minimal FK fixtures (not full column fidelity — see the test class comment for why) plus the
 -- proactive_work_* v1+v2 DDL verbatim from V7__proactive_work_v2.sql, the v3 work_kind column
 -- from V10__proactive_work_kind.sql, the v4 Missout categories from
--- V11__proactive_work_missout_categories.sql, and the v5 joint-credit join table from
--- V12__proactive_work_multi_subject.sql.
+-- V11__proactive_work_missout_categories.sql, the v5 joint-credit join table from
+-- V12__proactive_work_multi_subject.sql, and the KPI-29 Achievements update from
+-- V13__proactive_work_achievements.sql.
 
 CREATE TABLE employees (
   id int unsigned NOT NULL AUTO_INCREMENT,
@@ -39,8 +40,8 @@ CREATE TABLE `proactive_work_entry` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `kpi_measurement_id` bigint unsigned DEFAULT NULL,
   `entry_type` enum('KPI_LINKED','STANDALONE') GENERATED ALWAYS AS (if((`kpi_measurement_id` is null),_utf8mb4'STANDALONE',_utf8mb4'KPI_LINKED')) STORED NOT NULL,
-  `category` enum('ATTENDANCE_PUNCTUALITY','TEAM_SUPPORT','INITIATIVE_IDEA','EXTRA_HOURS','RESOURCE_SAVING','PROCESS_IMPROVEMENT','TECHNICAL_MISSOUT','FUNCTIONAL_MISSOUT','COMMUNICATION_MISSOUT','PROCESS_MISSOUT','TIMELINE_MISSOUT','OTHER') NOT NULL,
-  `work_kind` enum('PROACTIVE','MISSOUT') NOT NULL DEFAULT 'PROACTIVE',
+  `category` enum('ATTENDANCE_PUNCTUALITY','TEAM_SUPPORT','INITIATIVE_IDEA','EXTRA_HOURS','RESOURCE_SAVING','PROCESS_IMPROVEMENT','TECHNICAL_MISSOUT','FUNCTIONAL_MISSOUT','COMMUNICATION_MISSOUT','PROCESS_MISSOUT','TIMELINE_MISSOUT','KRA_DELIVERY','MILESTONE_ACHIEVED','QUALITY_STANDARDS','OPERATIONAL_EXCELLENCE','OTHER') NOT NULL,
+  `work_kind` enum('PROACTIVE','MISSOUT','ACHIEVEMENT') NOT NULL DEFAULT 'PROACTIVE',
   `other_category_text` varchar(300) DEFAULT NULL,
   `subject_employee_id` int unsigned NOT NULL,
   `logged_by_id` int unsigned NOT NULL,

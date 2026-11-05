@@ -23,6 +23,11 @@ const CATEGORY_LABELS = {
   COMMUNICATION_MISSOUT: "Communication Missouts",
   PROCESS_MISSOUT: "Process Missouts",
   TIMELINE_MISSOUT: "Timeline Missouts",
+  // KPI-29: Achievement category labels
+  KRA_DELIVERY: "KRA / Responsibility Delivery",
+  MILESTONE_ACHIEVED: "Milestone / Target Achieved",
+  QUALITY_STANDARDS: "Quality & SLA Compliance",
+  OPERATIONAL_EXCELLENCE: "Operational Excellence",
   OTHER: "Other",
 };
 
@@ -33,6 +38,11 @@ const CATEGORY_CHIP_STYLE = {
   EXTRA_HOURS: { background: "#fff4e8", color: "#c2570c" },
   RESOURCE_SAVING: { background: "#e6f7f6", color: "#0f766e" },
   PROCESS_IMPROVEMENT: { background: "#eef2ff", color: "#4338ca" },
+  // KPI-29: Achievement category chip styles
+  KRA_DELIVERY: { background: "#eff6ff", color: "#1d4ed8" },
+  MILESTONE_ACHIEVED: { background: "#f0fdf4", color: "#15803d" },
+  QUALITY_STANDARDS: { background: "#fdf4ff", color: "#86198f" },
+  OPERATIONAL_EXCELLENCE: { background: "#ecfeff", color: "#0e7490" },
   OTHER: { background: "var(--surface-2)", color: "var(--muted)" },
 };
 
